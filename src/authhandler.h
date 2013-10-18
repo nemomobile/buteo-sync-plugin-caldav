@@ -88,7 +88,7 @@ private:
     QString mUsername;
     QString mPassword;
     QString mScope;
-    QString mMechanism;
+    QString mMethod, mMechanism;
 };
 
 #endif // GAUTH_H

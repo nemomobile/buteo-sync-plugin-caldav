@@ -69,14 +69,14 @@ bool AuthHandler::init() {
 
     QVariant val = QVariant::String;
     mAccount->value(AUTH + SLASH + AUTH_METHOD, val);
-    QString method = val.toString();
+    mMethod = val.toString();
     mAccount->value(AUTH + SLASH + MECHANISM, val);
     mMechanism = val.toString();
 
     qint32 cId = mAccount->credentialsId();
     if (cId == 0) {
         QMap<MethodName,MechanismsList> methods;
-        methods.insert(method, QStringList()  << mMechanism);
+        methods.insert(mMethod, QStringList()  << mMechanism);
         IdentityInfo *info = new IdentityInfo(mAccount->displayName(), "", methods);
         QUrl url(mScope);
         info->setRealms(QStringList() << url.host());
@@ -93,7 +93,7 @@ bool AuthHandler::init() {
         mIdentity = Identity::existingIdentity(cId);
     }
 
-    mSession = mIdentity->createSession(mMechanism.toLatin1());
+    mSession = mIdentity->createSession(mMethod.toLatin1());
 
     connect(mSession, SIGNAL(response(const SignOn::SessionData &)),
             this, SLOT(sessionResponse(const SignOn::SessionData &)));
@@ -105,7 +105,7 @@ bool AuthHandler::init() {
 }
 
 void AuthHandler::sessionResponse(const SessionData &sessionData) {
-    if (mMechanism.compare("password", Qt::CaseInsensitive) == 0) {
+    if (mMethod.compare("password", Qt::CaseInsensitive) == 0) {
         QStringList propertyList = sessionData.propertyNames();
         foreach (const QString &propertyName, propertyList) {
             LOG_DEBUG(propertyName << sessionData.getProperty(propertyName).toString());
@@ -114,11 +114,11 @@ void AuthHandler::sessionResponse(const SessionData &sessionData) {
             else if (propertyName.compare("secret", Qt::CaseInsensitive) == 0)
                 mPassword = sessionData.getProperty( propertyName ).toString();
         }
-    } else if (mMechanism.compare("oauth", Qt::CaseInsensitive) == 0) {
+    } else if (mMethod.compare("oauth2", Qt::CaseInsensitive) == 0) {
         OAuth2PluginNS::OAuth2PluginTokenData response = sessionData.data<OAuth2PluginNS::OAuth2PluginTokenData>();
         mToken = response.AccessToken();
     } else {
-        LOG_FATAL("Unsupported Mechanism requested....................");
+        LOG_FATAL("Unsupported Mechanism requested...................." << mMethod);
         emit failed();
         return;
     }
@@ -146,10 +146,10 @@ void AuthHandler::authenticate()
     mAccount->value(AUTH + SLASH + AUTH_METHOD, val);
     QString method = val.toString();
 
-    if (mMechanism.compare("password", Qt::CaseInsensitive) == 0) {
+    if (mMethod.compare("password", Qt::CaseInsensitive) == 0) {
         SignOn::SessionData data;
         mSession->process(data, mMechanism);
-    } else if (mMechanism.compare("oauth", Qt::CaseInsensitive) == 0) {
+    } else if (mMethod.compare("oauth2", Qt::CaseInsensitive) == 0) {
         mAccount->value(AUTH + SLASH + method + SLASH + mMechanism + SLASH + HOST, val);
         QString host = val.toString();
         mAccount->value(AUTH + SLASH + method + SLASH + mMechanism + SLASH + AUTH_PATH, val);
@@ -162,13 +162,12 @@ void AuthHandler::authenticate()
         QString response_type = val.toString();
 
         QStringList scope;
-        if (mScope.isEmpty()) {
-            QVariant val1 = QVariant::StringList;
-            mAccount->value(AUTH + SLASH + method + SLASH + mMechanism + SLASH + SCOPE, val1);
-            scope.append(val1.toStringList());
-        } else {
-            scope.append(mScope);
-        }
+        QVariant val1 = QVariant::StringList;
+        mAccount->value(AUTH + SLASH + method + SLASH + mMechanism + SLASH + SCOPE, val1);
+        scope.append(val1.toStringList());
+        scope.append("https://www.googleapis.com/auth/calendar");
+        qDebug() << scope << "\n";
+
         QString clientId = storedKeyValue("google", "google", "client_id");
         QString clientSecret = storedKeyValue("google", "google", "client_secret");
         OAuth2PluginNS::OAuth2PluginData data;
@@ -183,7 +182,7 @@ void AuthHandler::authenticate()
 
         mSession->process(data, mMechanism);
     } else {
-        LOG_FATAL("Unsupported Mechanism requested....................");
+        LOG_FATAL("Unsupported Method requested...................." << mMethod);
         emit failed();
     }
 }
