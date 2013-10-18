@@ -25,7 +25,7 @@
 #define GCALENDARCLIENT_H
 
 #include "buteo-caldav-plugin.h"
-#include "oauthhandler.h"
+#include "authhandler.h"
 #include "settings.h"
 
 #include <QList>
@@ -116,7 +116,7 @@ class BUTEOCALDAVPLUGINSHARED_EXPORT CalDavClient : Buteo::ClientPlugin
 
         Buteo::SyncProfile::ConflictResolutionPolicy conflictResolutionPolicy();
 
-        OAuthHandler*               mOAuth;
+        AuthHandler*               mAuth;
 
         bool                        mSlowSync;
 

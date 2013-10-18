@@ -56,7 +56,7 @@ extern "C" void destroyPlugin(CalDavClient *aClient) {
 CalDavClient::CalDavClient(const QString& aPluginName,
                             const Buteo::SyncProfile& aProfile,
                             Buteo::PluginCbInterface *aCbInterface) :
-    ClientPlugin(aPluginName, aProfile, aCbInterface), mSlowSync (true), mOAuth(NULL)
+    ClientPlugin(aPluginName, aProfile, aCbInterface), mSlowSync (true), mAuth(NULL)
 {
     FUNCTION_CALL_TRACE;
 }
@@ -93,7 +93,7 @@ bool CalDavClient::uninit() {
 bool CalDavClient::startSync() {
     FUNCTION_CALL_TRACE;
 
-    if (!mOAuth)
+    if (!mAuth)
         return false;
 
     connect(this, SIGNAL(stateChanged(Sync::SyncProgressDetail)),
@@ -101,7 +101,7 @@ bool CalDavClient::startSync() {
     connect(this, SIGNAL(syncFinished(Sync::SyncStatus)),
             this, SLOT(receiveSyncFinished(Sync::SyncStatus)));
 
-    mOAuth->authenticate();
+    mAuth->authenticate();
 
     LOG_DEBUG ("Init done. Continuing with sync");
 
@@ -130,11 +130,11 @@ void CalDavClient::abortSync(Sync::SyncStatus aStatus) {
 bool CalDavClient::start() {
     FUNCTION_CALL_TRACE;
 
-    if (!mOAuth->username().isEmpty() && !mOAuth->password().isEmpty()) {
-        mSettings.setUsername(mOAuth->username());
-        mSettings.setPassword(mOAuth->password());
+    if (!mAuth->username().isEmpty() && !mAuth->password().isEmpty()) {
+        mSettings.setUsername(mAuth->username());
+        mSettings.setPassword(mAuth->password());
     }
-    mSettings.setAuthToken(mOAuth->token());
+    mSettings.setAuthToken(mAuth->token());
 
     switch (mSyncDirection)
     {
@@ -202,12 +202,12 @@ bool CalDavClient::initConfig () {
     if (!scopeList.isEmpty()) {
         scope = scopeList.first();
     }
-    mOAuth = new OAuthHandler(mAccountId, scope);
-    if (!mOAuth->init()) {
+    mAuth = new AuthHandler(mAccountId, scope);
+    if (!mAuth->init()) {
         return false;
     }
-    connect(mOAuth, SIGNAL(success()), this, SLOT(start()));
-    connect(mOAuth, SIGNAL(failed()), this, SLOT(authenticationError()));
+    connect(mAuth, SIGNAL(success()), this, SLOT(start()));
+    connect(mAuth, SIGNAL(failed()), this, SLOT(authenticationError()));
 
     mSettings.setIgnoreSSLErrors(true);
     mSettings.setUrl(scope);

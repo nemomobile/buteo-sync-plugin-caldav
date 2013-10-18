@@ -23,7 +23,6 @@ DEFINES += BUTEOCALDAVPLUGIN_LIBRARY
 HEADERS += \
     caldavclient.h \
     buteo-caldav-plugin.h \
-    oauthhandler.h \
     report.h \
     put.h \
     delete.h \
@@ -31,18 +30,19 @@ HEADERS += \
     cditem.h \
     settings.h \
     request.h \
-    get.h
+    get.h \
+    authhandler.h
 
 SOURCES += \
     caldavclient.cpp \
-    oauthhandler.cpp \
     report.cpp \
     put.cpp \
     delete.cpp \
     reader.cpp \
     cditem.cpp \
     settings.cpp \
-    get.cpp
+    get.cpp \
+    authhandler.cpp
 
 
 target.path = /usr/lib/buteo-plugins-qt5

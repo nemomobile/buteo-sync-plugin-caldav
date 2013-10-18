@@ -33,11 +33,11 @@
 
 #include <Accounts/Account>
 
-class OAuthHandler : public QObject
+class AuthHandler : public QObject
 {
     Q_OBJECT
 public:
-    explicit OAuthHandler(const quint32 accountId, const QString scope, QObject *parent = 0);
+    explicit AuthHandler(const quint32 accountId, const QString scope, QObject *parent = 0);
 
     void authenticate();
 
