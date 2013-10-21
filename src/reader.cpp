@@ -66,12 +66,13 @@ void Reader::readResponse() {
             readHref(item);
         } else if (mReader->name() == "propstat") {
             readPropStat(item);
-        } else {
-            delete item;
-            continue;
         }
     }
     QString uid = item->href();
+    if (uid.isEmpty()) {
+        LOG_DEBUG("UID was empty... Returning without inserting......");
+        return;
+    }
     LOG_DEBUG(QUrl::fromPercentEncoding(uid.toLatin1()));
     mIncidenceMap.insert(QUrl::fromPercentEncoding(uid.toLatin1()), item);
 }

@@ -75,7 +75,7 @@ QUrl Settings::makeUrl() {
     return mUrl;
 }
 
-void Settings::setAccountId(uint accountId) {
+void Settings::setAccountId(quint32 accountId) {
     mAccountId = accountId;
 }
 

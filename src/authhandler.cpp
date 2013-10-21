@@ -165,7 +165,6 @@ void AuthHandler::authenticate()
         QVariant val1 = QVariant::StringList;
         mAccount->value(AUTH + SLASH + method + SLASH + mMechanism + SLASH + SCOPE, val1);
         scope.append(val1.toStringList());
-        scope.append("https://www.googleapis.com/auth/calendar");
         qDebug() << scope << "\n";
 
         QString clientId = storedKeyValue("google", "google", "client_id");

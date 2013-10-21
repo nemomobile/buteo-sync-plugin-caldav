@@ -48,7 +48,7 @@ public:
     QUrl makeUrl();
     QString url();
 
-    void setAccountId(uint accountId);
+    void setAccountId(quint32 accountId);
     quint32 accountId();
 
 private:
