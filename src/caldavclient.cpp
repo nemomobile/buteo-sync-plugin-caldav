@@ -170,6 +170,40 @@ bool CalDavClient::abort(Sync::SyncStatus status) {
 
 bool CalDavClient::cleanUp() {
     FUNCTION_CALL_TRACE;
+    QStringList accountList = iProfile.keyValues(Buteo::KEY_ACCOUNT_ID);
+    int accountId = 0;
+    if (!accountList.isEmpty()) {
+        QString aId = accountList.first();
+        if (aId != NULL) {
+            accountId = aId.toInt();
+        }
+    }
+    mKCal::ExtendedCalendar::Ptr calendar = mKCal::ExtendedCalendar::Ptr (new mKCal::ExtendedCalendar(KDateTime::Spec::LocalZone()));
+    mKCal::ExtendedStorage::Ptr storage = calendar->defaultStorage(calendar);
+    storage->open();
+    QString aId = QString::number(accountId);
+    QString nbUid;
+    mKCal::Notebook::List notebookList = storage->notebooks();
+    LOG_DEBUG("Total Number of Notebooks in device = " << notebookList.count());
+    foreach (mKCal::Notebook::Ptr nbPtr, notebookList) {
+        if(nbPtr->account() == aId) {
+            nbUid = nbPtr->uid();
+            storage->loadNotebookIncidences(nbUid);
+            calendar->deleteAllIncidences();
+            storage->deleteNotebook(nbPtr);
+            break;
+        }
+    }
+    storage->save();
+    storage->close();
+    calendar->close();
+
+    if (nbUid.isNull() || nbUid.isEmpty()) {
+        LOG_WARNING("Not able to find NoteBook's UID...... Wont Save Events ");
+        emit syncFinished(Sync::SYNC_ERROR);
+        return false;
+    }
+
     return true;
 }
 
