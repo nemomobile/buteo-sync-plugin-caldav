@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<profile name="caldav" type="sync" >
+
+    <key name="Remote database" value="https://apidata.googleusercontent.com/caldav/v2/"/>
+    <key name="destinationtype" value="online"/>
+    <key name="enabled" value="true"/>
+    <key name="hidden" value="true"/>
+    <key name="use_accounts" value="true"/>
+
+    <profile type="client" name="googlecontacts">
+        <key value="two-way" name="Sync Direction"/>
+        <key value="gdata" name="Sync Protocol"/>
+        <key value="HTTP" name="Sync Transport"/>
+        <key value="prefer remote" name="conflictpolicy" />
+    </profile>
+
+</profile>

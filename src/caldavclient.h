@@ -36,7 +36,7 @@
 #include <SyncResults.h>
 #include <SyncCommonDefs.h>
 
-class BUTEOCALDAVPLUGINSHARED_EXPORT CalDavClient : Buteo::ClientPlugin
+class BUTEOCALDAVPLUGINSHARED_EXPORT CalDavClient : public Buteo::ClientPlugin
 {
     public:
         Q_OBJECT

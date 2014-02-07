@@ -118,7 +118,7 @@ void AuthHandler::sessionResponse(const SessionData &sessionData) {
         OAuth2PluginNS::OAuth2PluginTokenData response = sessionData.data<OAuth2PluginNS::OAuth2PluginTokenData>();
         mToken = response.AccessToken();
     } else {
-        LOG_FATAL("Unsupported Mechanism requested...................." << mMethod);
+        LOG_FATAL("Unsupported Mechanism requested....................");
         emit failed();
         return;
     }
@@ -181,7 +181,7 @@ void AuthHandler::authenticate()
 
         mSession->process(data, mMechanism);
     } else {
-        LOG_FATAL("Unsupported Method requested...................." << mMethod);
+        LOG_FATAL("Unsupported Method requested....................");
         emit failed();
     }
 }

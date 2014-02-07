@@ -3,7 +3,7 @@ TEMPLATE = lib
 
 QT       -= gui
 
-QT       += network
+QT       += network dbus
 
 CONFIG += link_pkgconfig plugin debug console
 PKGCONFIG += buteosyncfw5 libsignon-qt5 accounts-qt5 signon-oauth2plugin \
@@ -45,7 +45,23 @@ SOURCES += \
     authhandler.cpp
 
 
-target.path = /usr/lib/buteo-plugins-qt5
+#target.path = /usr/lib/buteo-plugins-qt5
+
+target.path = /usr/lib/buteo-plugins-qt5/oopp
+DEFINES += CLIENT_PLUGIN
+DEFINES += "CLASSNAME=CalDavClient"
+DEFINES += CLASSNAME_H=\\\"caldavclient.h\\\"
+INCLUDE_DIR = $$system(pkg-config --cflags buteosyncfw5|cut -f2 -d'I')
+
+HEADERS += $$INCLUDE_DIR/ButeoPluginIfAdaptor.h   \
+           $$INCLUDE_DIR/PluginCbImpl.h           \
+           $$INCLUDE_DIR/PluginServiceObj.h
+
+SOURCES += $$INCLUDE_DIR/ButeoPluginIfAdaptor.cpp \
+           $$INCLUDE_DIR/PluginCbImpl.cpp         \
+           $$INCLUDE_DIR/PluginServiceObj.cpp     \
+           $$INCLUDE_DIR/plugin_main.cpp
+
 
 sync.path = /etc/buteo/profiles/sync
 sync.files = xmls/sync/*
