@@ -8,9 +8,9 @@
     <key name="hidden" value="true"/>
     <key name="use_accounts" value="true"/>
 
-    <profile type="client" name="googlecontacts">
+    <profile type="client" name="caldav">
         <key value="two-way" name="Sync Direction"/>
-        <key value="gdata" name="Sync Protocol"/>
+        <key value="caldav" name="Sync Protocol"/>
         <key value="HTTP" name="Sync Transport"/>
         <key value="prefer remote" name="conflictpolicy" />
     </profile>
