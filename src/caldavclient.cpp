@@ -328,7 +328,9 @@ const QDateTime CalDavClient::lastSyncTime()
     Buteo::ProfileManager pm;
     Buteo::SyncProfile* sp = pm.syncProfile(iProfile.name());
     if (!sp->lastSuccessfulSyncTime().isNull()) {
-        return sp->lastSuccessfulSyncTime().addSecs(30);
+        // we add 2 seconds to ensure that the timestamp doesn't
+        // fall prior to when the calendar db commit fs sync finalises.
+        return sp->lastSuccessfulSyncTime().addSecs(2);
     } else {
         return sp->lastSuccessfulSyncTime();
     }
