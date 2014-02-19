@@ -215,6 +215,9 @@ QString AuthHandler::storedKeyValue(const char *provider, const char *service, c
     int success = SailfishKeyProvider_storedKey(provider, service, keyName, &storedKey);
     if (success == 0 && storedKey != NULL && strlen(storedKey) != 0) {
         retn = QLatin1String(storedKey);
+    }
+
+    if (storedKey) {
         free(storedKey);
     }
 
