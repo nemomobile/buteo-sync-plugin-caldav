@@ -187,7 +187,7 @@ bool CalDavClient::cleanUp()
         }
     }
 
-    mKCal::ExtendedCalendar::Ptr calendar = mKCal::ExtendedCalendar::Ptr(new mKCal::ExtendedCalendar(KDateTime::Spec::LocalZone()));
+    mKCal::ExtendedCalendar::Ptr calendar = mKCal::ExtendedCalendar::Ptr(new mKCal::ExtendedCalendar(KDateTime::Spec::UTC()));
     mKCal::ExtendedStorage::Ptr storage = calendar->defaultStorage(calendar);
     storage->open();
     QString aId = QString::number(accountId);
@@ -330,7 +330,7 @@ const QDateTime CalDavClient::lastSyncTime()
     if (!sp->lastSuccessfulSyncTime().isNull()) {
         // we add 2 seconds to ensure that the timestamp doesn't
         // fall prior to when the calendar db commit fs sync finalises.
-        return sp->lastSuccessfulSyncTime().addSecs(2);
+        return sp->lastSuccessfulSyncTime().addSecs(2).toUTC();
     } else {
         return sp->lastSuccessfulSyncTime();
     }
@@ -365,7 +365,7 @@ void CalDavClient::startSlowSync()
         notebook->setPluginName(getPluginName());
         notebook->setSyncProfile(getProfileName());
 
-        mKCal::ExtendedCalendar::Ptr calendar = mKCal::ExtendedCalendar::Ptr(new mKCal::ExtendedCalendar(KDateTime::Spec::LocalZone()));
+        mKCal::ExtendedCalendar::Ptr calendar = mKCal::ExtendedCalendar::Ptr(new mKCal::ExtendedCalendar(KDateTime::Spec::UTC()));
         mKCal::ExtendedStorage::Ptr storage = calendar->defaultStorage(calendar);
         storage->open();
         bool status = storage->addNotebook(notebook);
@@ -383,11 +383,12 @@ void CalDavClient::startSlowSync()
 
 void CalDavClient::startQuickSync()
 {
-    mKCal::ExtendedCalendar::Ptr calendar = mKCal::ExtendedCalendar::Ptr(new mKCal::ExtendedCalendar(KDateTime::Spec::LocalZone()));
+    mKCal::ExtendedCalendar::Ptr calendar = mKCal::ExtendedCalendar::Ptr(new mKCal::ExtendedCalendar(KDateTime::Spec::UTC()));
     mKCal::ExtendedStorage::Ptr storage = calendar->defaultStorage(calendar);
 
     storage->open();
-    storage->load(QDateTime::currentDateTime().addMonths(-6).date(), QDateTime::currentDateTime().addMonths(12).date());
+    storage->load(QDateTime::currentDateTime().toUTC().addMonths(-6).date(),
+                  QDateTime::currentDateTime().toUTC().addMonths(12).date());
     KCalCore::Incidence::List *list = new KCalCore::Incidence::List();
     LOG_DEBUG("\n\n------------------>>>>>>>>>>>>>>>>> LAST SYNC TIME = " << lastSyncTime() << "\n\n\n\n");
     KDateTime date(lastSyncTime());

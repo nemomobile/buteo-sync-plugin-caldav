@@ -167,7 +167,7 @@ void Report::processEvents()
         LOG_DEBUG("Total content length of the data = " << data.length());
         LOG_DEBUG(data);
         QHash<QString, CDItem*> map = reader.getIncidenceMap();
-        mKCal::ExtendedCalendar::Ptr calendar = mKCal::ExtendedCalendar::Ptr(new mKCal::ExtendedCalendar(KDateTime::Spec::LocalZone()));
+        mKCal::ExtendedCalendar::Ptr calendar = mKCal::ExtendedCalendar::Ptr(new mKCal::ExtendedCalendar(KDateTime::Spec::UTC()));
         mKCal::ExtendedStorage::Ptr storage = calendar->defaultStorage(calendar);
         storage->open();
         QString aId = QString::number(mSettings->accountId());
@@ -293,7 +293,7 @@ void Report::processETags()
         LOG_DEBUG("Total content length of the data = " << data.length());
         QHash<QString, CDItem*> map = reader.getIncidenceMap();
         QStringList eventIdList;
-        mKCal::ExtendedCalendar::Ptr calendar = mKCal::ExtendedCalendar::Ptr(new mKCal::ExtendedCalendar(KDateTime::Spec::LocalZone()));
+        mKCal::ExtendedCalendar::Ptr calendar = mKCal::ExtendedCalendar::Ptr(new mKCal::ExtendedCalendar(KDateTime::Spec::UTC()));
         mKCal::ExtendedStorage::Ptr storage = calendar->defaultStorage(calendar);
         storage->open();
         QString aId = QString::number(mSettings->accountId());
@@ -375,7 +375,7 @@ void Report::updateETags()
         reader.read(data);
         LOG_DEBUG("Total content length of the data = " << data.length());
         QHash<QString, CDItem*> map = reader.getIncidenceMap();
-        mKCal::ExtendedCalendar::Ptr calendar = mKCal::ExtendedCalendar::Ptr(new mKCal::ExtendedCalendar(KDateTime::Spec::LocalZone()));
+        mKCal::ExtendedCalendar::Ptr calendar = mKCal::ExtendedCalendar::Ptr(new mKCal::ExtendedCalendar(KDateTime::Spec::UTC()));
         mKCal::ExtendedStorage::Ptr storage = calendar->defaultStorage(calendar);
         storage->open();
         storage->load();
