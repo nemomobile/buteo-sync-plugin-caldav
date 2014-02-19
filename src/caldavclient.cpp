@@ -229,9 +229,9 @@ bool CalDavClient::initConfig()
     LOG_DEBUG("Initiating config...");
 
     mAccountId = 0;
-    QString scope = "";
+    QString remoteDatabasePath = "";
     QStringList accountList = iProfile.keyValues(Buteo::KEY_ACCOUNT_ID);
-    QStringList scopeList   = iProfile.keyValues(Buteo::KEY_REMOTE_DATABASE);
+    QStringList remotePaths = iProfile.keyValues(Buteo::KEY_REMOTE_DATABASE);
     QStringList unameList   = iProfile.keyValues(Buteo::KEY_USERNAME);
     QStringList paswdList   = iProfile.keyValues(Buteo::KEY_PASSWORD);
     if (!accountList.isEmpty()) {
@@ -243,13 +243,13 @@ bool CalDavClient::initConfig()
         return false;
     }
 
-    if (!scopeList.isEmpty()) {
-        scope = scopeList.first();
+    if (!remotePaths.isEmpty()) {
+        remoteDatabasePath = remotePaths.first();
     }
     if (!mManager) {
         mManager = new Accounts::Manager(this);
     }
-    mAuth = new AuthHandler(mManager, mAccountId, scope);
+    mAuth = new AuthHandler(mManager, mAccountId, remoteDatabasePath);
     if (!mAuth->init()) {
         return false;
     }
@@ -257,7 +257,7 @@ bool CalDavClient::initConfig()
     connect(mAuth, SIGNAL(failed()), this, SLOT(authenticationError()));
 
     mSettings.setIgnoreSSLErrors(true);
-    mSettings.setUrl(scope);
+    mSettings.setUrl(remoteDatabasePath);
     if (!unameList.isEmpty())
         mSettings.setUsername(unameList.first());
     if (!paswdList.isEmpty())

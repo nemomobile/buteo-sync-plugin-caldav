@@ -44,6 +44,9 @@ SOURCES += \
     get.cpp \
     authhandler.cpp
 
+OTHER_FILES += \
+    xmls/client/caldav.xml \
+    xmls/sync/caldav-sync.xml
 
 #target.path = /usr/lib/buteo-plugins-qt5
 

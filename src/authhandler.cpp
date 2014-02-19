@@ -53,10 +53,10 @@ const QString AUTH                  ("auth");
 const QString AUTH_METHOD           ("method");
 const QString MECHANISM             ("mechanism");
 
-AuthHandler::AuthHandler(Accounts::Manager *manager, const quint32 accountId, const QString &scope, QObject *parent)
+AuthHandler::AuthHandler(Accounts::Manager *manager, const quint32 accountId, const QString &remoteDatabasePath, QObject *parent)
     : QObject(parent)
     , mAccount (manager->account(accountId))
-    , mScope(scope)
+    , mRemoteDatabasePath(remoteDatabasePath)
 {
 }
 
@@ -78,7 +78,7 @@ bool AuthHandler::init()
         QMap<MethodName,MechanismsList> methods;
         methods.insert(mMethod, QStringList()  << mMechanism);
         IdentityInfo *info = new IdentityInfo(mAccount->displayName(), "", methods);
-        QUrl url(mScope);
+        QUrl url(mRemoteDatabasePath);
         info->setRealms(QStringList() << url.host());
         info->setType(IdentityInfo::Application);
 

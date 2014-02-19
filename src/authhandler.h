@@ -38,7 +38,7 @@ class AuthHandler : public QObject
 {
     Q_OBJECT
 public:
-    explicit AuthHandler(Accounts::Manager *manager, const quint32 accountId, const QString &scope, QObject *parent = 0);
+    explicit AuthHandler(Accounts::Manager *manager, const quint32 accountId, const QString &remoteDatabasePath, QObject *parent = 0);
 
     void authenticate();
     const QString token();
@@ -75,7 +75,7 @@ private:
     QString mToken;
     QString mUsername;
     QString mPassword;
-    QString mScope;
+    QString mRemoteDatabasePath;
     QString mMethod, mMechanism;
 };
 
