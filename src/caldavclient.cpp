@@ -59,8 +59,9 @@ CalDavClient::CalDavClient(const QString& aPluginName,
                             const Buteo::SyncProfile& aProfile,
                             Buteo::PluginCbInterface *aCbInterface)
     : ClientPlugin(aPluginName, aProfile, aCbInterface)
-    , mSlowSync(true)
+    , mManager(NULL)
     , mAuth(NULL)
+    , mSlowSync(true)
 {
     FUNCTION_CALL_TRACE;
 }
@@ -245,7 +246,10 @@ bool CalDavClient::initConfig()
     if (!scopeList.isEmpty()) {
         scope = scopeList.first();
     }
-    mAuth = new AuthHandler(mAccountId, scope);
+    if (!mManager) {
+        mManager = new Accounts::Manager(this);
+    }
+    mAuth = new AuthHandler(mManager, mAccountId, scope);
     if (!mAuth->init()) {
         return false;
     }
@@ -357,8 +361,10 @@ Buteo::SyncResults CalDavClient::getSyncResults() const
 
 void CalDavClient::startSlowSync()
 {
-    Accounts::Manager *manager = new Accounts::Manager();
-    Accounts::Account *account  = manager->account(mAccountId);
+    if (!mManager) {
+        mManager = new Accounts::Manager(this);
+    }
+    Accounts::Account *account  = mManager->account(mAccountId);
     if (account != NULL) {
         mKCal::Notebook::Ptr notebook = mKCal::Notebook::Ptr(new mKCal::Notebook(account->displayName(), ""));
         notebook->setAccount(QString::number(mAccountId));

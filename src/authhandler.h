@@ -31,13 +31,14 @@
 #include <SignOn/AuthService>
 #include <SignOn/Identity>
 
+#include <Accounts/Manager>
 #include <Accounts/Account>
 
 class AuthHandler : public QObject
 {
     Q_OBJECT
 public:
-    explicit AuthHandler(const quint32 accountId, const QString &scope, QObject *parent = 0);
+    explicit AuthHandler(Accounts::Manager *manager, const quint32 accountId, const QString &scope, QObject *parent = 0);
 
     void authenticate();
     const QString token();

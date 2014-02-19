@@ -36,6 +36,8 @@
 #include <SyncResults.h>
 #include <SyncCommonDefs.h>
 
+#include <Accounts/Manager>
+
 class BUTEOCALDAVPLUGINSHARED_EXPORT CalDavClient : public Buteo::ClientPlugin
 {
     Q_OBJECT
@@ -76,15 +78,16 @@ private:
     Buteo::SyncProfile::SyncDirection syncDirection();
     Buteo::SyncProfile::ConflictResolutionPolicy conflictResolutionPolicy();
 
+    QNetworkAccessManager*      mNAManager;
+    Accounts::Manager*          mManager;
     AuthHandler*                mAuth;
-    bool                        mSlowSync;
     Buteo::SyncResults          mResults;
     quint32                     mAccountId;
     Sync::SyncStatus            mSyncStatus;
     Buteo::SyncProfile::SyncDirection mSyncDirection;
     Buteo::SyncProfile::ConflictResolutionPolicy mConflictResPolicy;
-    QNetworkAccessManager*      mNAManager;
     Settings                    mSettings;
+    bool                        mSlowSync;
 };
 
 /*! \brief Creates CalDav client plugin

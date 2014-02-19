@@ -53,12 +53,11 @@ const QString AUTH                  ("auth");
 const QString AUTH_METHOD           ("method");
 const QString MECHANISM             ("mechanism");
 
-AuthHandler::AuthHandler(const quint32 accountId, const QString &scope, QObject *parent)
+AuthHandler::AuthHandler(Accounts::Manager *manager, const quint32 accountId, const QString &scope, QObject *parent)
     : QObject(parent)
+    , mAccount (manager->account(accountId))
+    , mScope(scope)
 {
-    Manager *manager = new Manager();
-    mAccount = manager->account(accountId);
-    mScope = scope;
 }
 
 bool AuthHandler::init()
