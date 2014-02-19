@@ -33,16 +33,18 @@
 
 #include <LogMacros.h>
 
-Reader::Reader(QObject *parent) :
-    QObject(parent)
+Reader::Reader(QObject *parent)
+    : QObject(parent)
 {
 }
 
-Reader::~Reader() {
+Reader::~Reader()
+{
     delete mReader;
 }
 
-void Reader::read(const QByteArray data) {
+void Reader::read(const QByteArray &data)
+{
     mReader = new QXmlStreamReader(data);
     while (mReader->readNextStartElement()) {
         if (mReader->name() == "multistatus") {
@@ -51,7 +53,8 @@ void Reader::read(const QByteArray data) {
     }
 }
 
-void Reader::readMultiStatus() {
+void Reader::readMultiStatus()
+{
     while (mReader->readNextStartElement()) {
         if (mReader->name() == "response") {
             readResponse();
@@ -59,7 +62,8 @@ void Reader::readMultiStatus() {
     }
 }
 
-void Reader::readResponse() {
+void Reader::readResponse()
+{
     CDItem *item = new CDItem();
     while (mReader->readNextStartElement()) {
         if (mReader->name() == "href") {
@@ -77,12 +81,14 @@ void Reader::readResponse() {
     mIncidenceMap.insert(QUrl::fromPercentEncoding(uid.toLatin1()), item);
 }
 
-void Reader::readHref(CDItem* item) {
+void Reader::readHref(CDItem* item)
+{
     item->setHref(mReader->readElementText());
     qDebug() << item->href();
 }
 
-void Reader::readPropStat(CDItem* item) {
+void Reader::readPropStat(CDItem* item)
+{
     while (mReader->readNextStartElement()) {
         if (mReader->name() == "prop") {
             readProp(item);
@@ -92,12 +98,14 @@ void Reader::readPropStat(CDItem* item) {
     }
 }
 
-void Reader::readStatus(CDItem* item) {
+void Reader::readStatus(CDItem* item)
+{
     item->setStatus(mReader->readElementText());
     qDebug() << item->status();
 }
 
-void Reader::readProp(CDItem* item) {
+void Reader::readProp(CDItem* item)
+{
     while (mReader->readNextStartElement()) {
         if (mReader->name() == "getetag") {
             readGetETag(item);
@@ -107,22 +115,24 @@ void Reader::readProp(CDItem* item) {
     }
 }
 
-void Reader::readGetETag(CDItem* item) {
+void Reader::readGetETag(CDItem* item)
+{
     item->setETag(mReader->readElementText());
     qDebug() << item->etag();
 }
 
-void Reader::readCalendarData(CDItem* item) {
+void Reader::readCalendarData(CDItem* item)
+{
     QString event = mReader->readElementText();
     KCalCore::ICalFormat *icalFormat = new KCalCore::ICalFormat();
     KCalCore::Incidence::Ptr incidence = icalFormat->fromString(event);
     if (incidence != 0) {
         item->setIncidence(incidence);
-
         KCalCore::Incidence *inc = (KCalCore::Incidence*)incidence.data();
     }
 }
 
-QHash<QString, CDItem *> Reader::getIncidenceMap() {
+QHash<QString, CDItem *> Reader::getIncidenceMap()
+{
     return mIncidenceMap;
 }

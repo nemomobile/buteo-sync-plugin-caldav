@@ -28,16 +28,17 @@
 #include <QBuffer>
 #include <QDebug>
 
-Delete::Delete(QNetworkAccessManager *manager, Settings *settings, QObject *parent) :
-        Request(manager, settings, "DELETE", parent)
+Delete::Delete(QNetworkAccessManager *manager, Settings *settings, QObject *parent)
+    : Request(manager, settings, "DELETE", parent)
 {
     FUNCTION_CALL_TRACE;
 }
 
 
-void Delete::deleteEvent(const QString &uri) {
+void Delete::deleteEvent(const QString &uri)
+{
     QNetworkRequest request;
-    QUrl url(mSettings->url() + uri );
+    QUrl url(mSettings->url() + uri);
     if (!mSettings->authToken().isEmpty()) {
         request.setRawHeader(QString("Authorization").toLatin1(),
                              QString("Bearer " + mSettings->authToken()).toLatin1());
@@ -54,25 +55,26 @@ void Delete::deleteEvent(const QString &uri) {
             this, SLOT(slotError(QNetworkReply::NetworkError)));
     connect(mNReply, SIGNAL(sslErrors(QList<QSslError>)),
             this, SLOT(slotSslErrors(QList<QSslError>)));
-
 }
 
-void Delete::requestFinished() {
+void Delete::requestFinished()
+{
     LOG_DEBUG("DELETE Request Finished............" << mNReply->readAll());
-    QVariant statusCode = mNReply->attribute( QNetworkRequest::HttpStatusCodeAttribute );
-    if (statusCode.isValid() ) {
+    QVariant statusCode = mNReply->attribute(QNetworkRequest::HttpStatusCodeAttribute);
+    if (statusCode.isValid()) {
         int status = statusCode.toInt();
         qDebug() << "Status Code : " << status << "\n";
         emit finished();
     }
     const QList<QByteArray>& rawHeaderList(mNReply->rawHeaderList());
-    foreach (QByteArray rawHeader, rawHeaderList) {
+    Q_FOREACH (const QByteArray &rawHeader, rawHeaderList) {
         qDebug() << rawHeader << " : " << mNReply->rawHeader(rawHeader);
     }
     qDebug() << "---------------------------------------------------------------------\n";
 }
 
-void Delete::slotError(QNetworkReply::NetworkError error) {
+void Delete::slotError(QNetworkReply::NetworkError error)
+{
     if (error <= 200) {
         emit syncError(Sync::SYNC_CONNECTION_ERROR);
     } else if (error > 200 && error < 400) {
@@ -82,7 +84,8 @@ void Delete::slotError(QNetworkReply::NetworkError error) {
     }
 }
 
-void Delete::slotSslErrors(QList<QSslError> errors) {
+void Delete::slotSslErrors(QList<QSslError> errors)
+{
     qDebug() << "SSL Error";
     if (mSettings->ignoreSSLErrors()) {
         mNReply->ignoreSslErrors(errors);

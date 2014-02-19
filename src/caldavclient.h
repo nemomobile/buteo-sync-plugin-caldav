@@ -21,8 +21,8 @@
  *
  */
 
-#ifndef GCALENDARCLIENT_H
-#define GCALENDARCLIENT_H
+#ifndef CALDAVCLIENT_H
+#define CALDAVCLIENT_H
 
 #include "buteo-caldav-plugin.h"
 #include "authhandler.h"
@@ -38,101 +38,53 @@
 
 class BUTEOCALDAVPLUGINSHARED_EXPORT CalDavClient : public Buteo::ClientPlugin
 {
-    public:
-        Q_OBJECT
-    public:
+    Q_OBJECT
 
-        /*! \brief Constructor
-         *
-         * @param aPluginName Name of this client plugin
-         * @param aProfile Sync profile
-         * @param aCbInterface Pointer to the callback interface
-         */
-        CalDavClient( const QString& aPluginName,
-                      const Buteo::SyncProfile& aProfile,
-                      Buteo::PluginCbInterface *aCbInterface );
+public:
+    CalDavClient(const QString &aPluginName,
+                 const Buteo::SyncProfile &aProfile,
+                 Buteo::PluginCbInterface *aCbInterface);
+    virtual ~CalDavClient();
 
-        /*! \brief Destructor
-         *
-         * Call uninit before destroying the object.
-         */
-        virtual ~CalDavClient();
+    virtual bool init();
+    virtual bool uninit();
+    virtual bool startSync();
+    virtual void abortSync(Sync::SyncStatus aStatus = Sync::SYNC_ABORTED);
+    virtual Buteo::SyncResults getSyncResults() const;
+    virtual bool cleanUp();
 
-        //! @see SyncPluginBase::init
-        virtual bool init();
+Q_SIGNALS:
+    void stateChanged(Sync::SyncProgressDetail progress);
+    void syncFinished(Sync::SyncStatus);
 
-        //! @see SyncPluginBase::uninit
-        virtual bool uninit();
+public Q_SLOTS:
+    virtual void connectivityStateChanged(Sync::ConnectivityType aType, bool aState);
+    bool start();
+    void authenticationError();
+    void receiveStateChanged(Sync::SyncProgressDetail aState);
+    void receiveSyncFinished(Sync::SyncStatus);
+    void requestFinished();
 
-        //! @see ClientPlugin::startSync
-        virtual bool startSync();
+private:
+    void startSlowSync();
+    void startQuickSync();
+    const QDateTime lastSyncTime();
+    const QString authToken();
+    bool abort(Sync::SyncStatus status);
+    bool initConfig();
+    void closeConfig();
+    Buteo::SyncProfile::SyncDirection syncDirection();
+    Buteo::SyncProfile::ConflictResolutionPolicy conflictResolutionPolicy();
 
-        //! @see SyncPluginBase::abortSync
-        virtual void abortSync(Sync::SyncStatus aStatus = Sync::SYNC_ABORTED);
-
-        //! @see SyncPluginBase::getSyncResults
-        virtual Buteo::SyncResults getSyncResults() const;
-
-        //! @see SyncPluginBase::cleanUp
-        virtual bool cleanUp();
-
-    signals:
-        void stateChanged (Sync::SyncProgressDetail progress);
-
-        void syncFinished (Sync::SyncStatus);
-
-    public slots:
-
-        //! @see SyncPluginBase::connectivityStateChanged
-        virtual void connectivityStateChanged( Sync::ConnectivityType aType, bool aState );
-
-        bool start ();
-
-        void authenticationError();
-
-        void receiveStateChanged(Sync::SyncProgressDetail aState);
-
-        void receiveSyncFinished(Sync::SyncStatus);
-
-        void requestFinished();
-
-    private:
-
-        void startSlowSync();
-
-        void startQuickSync();
-
-        const QDateTime lastSyncTime();
-
-        const QString authToken ();
-
-        bool abort (Sync::SyncStatus status);
-
-        bool initConfig ();
-
-        void closeConfig ();
-
-        Buteo::SyncProfile::SyncDirection syncDirection();
-
-        Buteo::SyncProfile::ConflictResolutionPolicy conflictResolutionPolicy();
-
-        AuthHandler*               mAuth;
-
-        bool                        mSlowSync;
-
-        Buteo::SyncResults          mResults;
-
-        quint32                     mAccountId;
-
-        Sync::SyncStatus            mSyncStatus;
-
-        Buteo::SyncProfile::SyncDirection mSyncDirection;
-
-        Buteo::SyncProfile::ConflictResolutionPolicy mConflictResPolicy;
-
-        QNetworkAccessManager       *mNAManager;
-
-        Settings                    mSettings;
+    AuthHandler*                mAuth;
+    bool                        mSlowSync;
+    Buteo::SyncResults          mResults;
+    quint32                     mAccountId;
+    Sync::SyncStatus            mSyncStatus;
+    Buteo::SyncProfile::SyncDirection mSyncDirection;
+    Buteo::SyncProfile::ConflictResolutionPolicy mConflictResPolicy;
+    QNetworkAccessManager*      mNAManager;
+    Settings                    mSettings;
 };
 
 /*! \brief Creates CalDav client plugin
@@ -142,14 +94,14 @@ class BUTEOCALDAVPLUGINSHARED_EXPORT CalDavClient : public Buteo::ClientPlugin
  * @param aCbInterface Pointer to the callback interface
  * @return Client plugin on success, otherwise NULL
  */
-extern "C" CalDavClient* createPlugin( const QString& aPluginName,
-                                       const Buteo::SyncProfile& aProfile,
-                                       Buteo::PluginCbInterface *aCbInterface );
+extern "C" CalDavClient* createPlugin(const QString &aPluginName,
+                                      const Buteo::SyncProfile &aProfile,
+                                      Buteo::PluginCbInterface *aCbInterface);
 
 /*! \brief Destroys CalDav client plugin
  *
  * @param aClient CalDav client plugin instance to destroy
  */
-extern "C" void destroyPlugin( CalDavClient *aClient );
+extern "C" void destroyPlugin(CalDavClient *aClient);
 
-#endif // GCALENDARCLIENT_H
+#endif // CALDAVCLIENT_H

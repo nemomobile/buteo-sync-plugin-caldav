@@ -11,17 +11,19 @@
 #include <incidence.h>
 #include <icalformat.h>
 
-Get::Get(QNetworkAccessManager *manager, Settings *settings, QObject *parent) :
-     Request(manager, settings, "GET", parent)
+Get::Get(QNetworkAccessManager *manager, Settings *settings, QObject *parent)
+    : Request(manager, settings, "GET", parent)
 {
 }
 
-void Get::getEvent(const QString &u) {
+void Get::getEvent(const QString &u)
+{
     QNetworkRequest request;
 
     QUrl url(u);
     if (!mSettings->authToken().isEmpty()) {
-        request.setRawHeader(QString("Authorization").toLatin1(), QString("Bearer " + mSettings->authToken()).toLatin1());
+        request.setRawHeader(QString("Authorization").toLatin1(),
+                             QString("Bearer " + mSettings->authToken()).toLatin1());
     } else {
         url.setUserName(mSettings->username());
         url.setPassword(mSettings->password());
@@ -34,10 +36,10 @@ void Get::getEvent(const QString &u) {
             this, SLOT(slotError(QNetworkReply::NetworkError)));
     connect(mNReply, SIGNAL(sslErrors(QList<QSslError>)),
             this, SLOT(slotSslErrors(QList<QSslError>)));
-
 }
 
-void Get::requestFinished() {
+void Get::requestFinished()
+{
     QByteArray data = mNReply->readAll();
     LOG_DEBUG("GET Request Finished............" << data);
 
@@ -54,7 +56,8 @@ void Get::requestFinished() {
     emit syncError(Sync::SYNC_ERROR);
 }
 
-void Get::slotError(QNetworkReply::NetworkError error) {
+void Get::slotError(QNetworkReply::NetworkError error)
+{
     qDebug() << "Error # " << error;
     if (error <= 200) {
         emit syncError(Sync::SYNC_CONNECTION_ERROR);
@@ -65,7 +68,8 @@ void Get::slotError(QNetworkReply::NetworkError error) {
     }
 }
 
-void Get::slotSslErrors(QList<QSslError> errors) {
+void Get::slotSslErrors(QList<QSslError> errors)
+{
     qDebug() << "SSL Error";
     if (mSettings->ignoreSSLErrors()) {
         mNReply->ignoreSslErrors(errors);

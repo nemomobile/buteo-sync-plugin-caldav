@@ -37,17 +37,18 @@
 class Request : public QObject
 {
     Q_OBJECT
+
 public:
     explicit Request(QNetworkAccessManager *manager, Settings *settings,
-                     QString requestType, QObject *parent = 0) :
+                     const QString &requestType, QObject *parent = 0) :
         QObject(parent), mNAManager(manager), REQUEST_TYPE(requestType), mSettings(settings)
     {    FUNCTION_CALL_TRACE;  }
 
-signals:
+Q_SIGNALS:
     void finished();
     void syncError(Sync::SyncStatus);
 
-protected slots:
+protected Q_SLOTS:
     virtual void slotError(QNetworkReply::NetworkError) = 0;
     virtual void slotSslErrors(QList<QSslError>) = 0;
 
@@ -55,7 +56,7 @@ protected:
     void debugRequest(const QNetworkRequest &request, const QByteArray &data) {
         qDebug() << "-----------------------------------------------\n";
         const QList<QByteArray>& rawHeaderList(request.rawHeaderList());
-        foreach (QByteArray rawHeader, rawHeaderList) {
+        Q_FOREACH (const QByteArray &rawHeader, rawHeaderList) {
             qDebug() << rawHeader << " : " << request.rawHeader(rawHeader);
         }
         qDebug() << "URL = " << request.url();
@@ -64,13 +65,9 @@ protected:
     }
 
     QNetworkAccessManager *mNAManager;
-
     QNetworkReply *mNReply;
-
     const QString REQUEST_TYPE;
-
     Settings* mSettings;
-
 };
 
 #endif // REQUEST_H

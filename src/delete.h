@@ -39,10 +39,10 @@ class Delete : public Request
 
 public:
     explicit Delete(QNetworkAccessManager *manager, Settings *settings, QObject *parent = 0);
-    
+
     void deleteEvent(const QString &uri);
 
-public slots:
+public Q_SLOTS:
     void requestFinished();
     void slotError(QNetworkReply::NetworkError error);
     void slotSslErrors(QList<QSslError> errors);

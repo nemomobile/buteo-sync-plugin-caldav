@@ -42,9 +42,9 @@ public:
 
     void getAllEvents();
     void getAllETags();
-    void multiGetEvents(const QStringList eventIdList, bool includeCalendarData);
+    void multiGetEvents(const QStringList &eventIdList, bool includeCalendarData);
 
-public slots:
+public Q_SLOTS:
     void processEvents();
     void processETags();
     void updateETags();

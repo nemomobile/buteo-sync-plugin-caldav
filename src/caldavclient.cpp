@@ -45,37 +45,44 @@
 
 extern "C" CalDavClient* createPlugin(const QString& aPluginName,
                                          const Buteo::SyncProfile& aProfile,
-                                         Buteo::PluginCbInterface *aCbInterface) {
+                                         Buteo::PluginCbInterface *aCbInterface)
+{
     return new CalDavClient(aPluginName, aProfile, aCbInterface);
 }
 
-extern "C" void destroyPlugin(CalDavClient *aClient) {
+extern "C" void destroyPlugin(CalDavClient *aClient)
+{
     delete aClient;
 }
 
 CalDavClient::CalDavClient(const QString& aPluginName,
                             const Buteo::SyncProfile& aProfile,
-                            Buteo::PluginCbInterface *aCbInterface) :
-    ClientPlugin(aPluginName, aProfile, aCbInterface), mSlowSync (true), mAuth(NULL)
+                            Buteo::PluginCbInterface *aCbInterface)
+    : ClientPlugin(aPluginName, aProfile, aCbInterface)
+    , mSlowSync(true)
+    , mAuth(NULL)
 {
     FUNCTION_CALL_TRACE;
 }
 
-CalDavClient::~CalDavClient() {
+CalDavClient::~CalDavClient()
+{
     FUNCTION_CALL_TRACE;
 }
 
-bool CalDavClient::init() {
+bool CalDavClient::init()
+{
     FUNCTION_CALL_TRACE;
 
-    if (lastSyncTime().isNull ())
+    if (lastSyncTime().isNull()) {
         mSlowSync = true;
-    else
+    } else {
         mSlowSync = false;
+    }
 
     mNAManager = new QNetworkAccessManager;
 
-    if (initConfig ()) {
+    if (initConfig()) {
         return true;
     } else {
         // Uninitialize everything that was initialized before failure.
@@ -84,13 +91,14 @@ bool CalDavClient::init() {
     }
 }
 
-bool CalDavClient::uninit() {
+bool CalDavClient::uninit()
+{
     FUNCTION_CALL_TRACE;
-
     return true;
 }
 
-bool CalDavClient::startSync() {
+bool CalDavClient::startSync()
+{
     FUNCTION_CALL_TRACE;
 
     if (!mAuth)
@@ -108,7 +116,8 @@ bool CalDavClient::startSync() {
     return true;
 }
 
-void CalDavClient::abortSync(Sync::SyncStatus aStatus) {
+void CalDavClient::abortSync(Sync::SyncStatus aStatus)
+{
     FUNCTION_CALL_TRACE;
     Sync::SyncStatus state = Sync::SYNC_ABORTED;
 
@@ -116,18 +125,17 @@ void CalDavClient::abortSync(Sync::SyncStatus aStatus) {
         state = Sync::SYNC_CONNECTION_ERROR;
     }
 
-    if( !this->abort (state)) {
-        LOG_DEBUG( "Agent not active, aborting immediately" );
+    if (!this->abort(state)) {
+        LOG_DEBUG("Agent not active, aborting immediately");
         syncFinished(Sync::SYNC_ABORTED);
 
-    }
-    else
-    {
-        LOG_DEBUG( "Agent active, abort event posted" );
+    } else {
+        LOG_DEBUG("Agent active, abort event posted");
     }
 }
 
-bool CalDavClient::start() {
+bool CalDavClient::start()
+{
     FUNCTION_CALL_TRACE;
 
     if (!mAuth->username().isEmpty() && !mAuth->password().isEmpty()) {
@@ -136,15 +144,13 @@ bool CalDavClient::start() {
     }
     mSettings.setAuthToken(mAuth->token());
 
-    switch (mSyncDirection)
-    {
+    switch (mSyncDirection) {
     case Buteo::SyncProfile::SYNC_DIRECTION_TWO_WAY:
         if (mSlowSync) {
             startSlowSync();
         } else {
             startQuickSync();
         }
-
         break;
     case Buteo::SyncProfile::SYNC_DIRECTION_FROM_REMOTE:
         // Not required
@@ -153,7 +159,7 @@ bool CalDavClient::start() {
         // Not required
         break;
     case Buteo::SyncProfile::SYNC_DIRECTION_UNDEFINED:
-        // Not required
+        // flow through
     default:
         // throw configuration error
         break;
@@ -162,13 +168,15 @@ bool CalDavClient::start() {
     return true;
 }
 
-bool CalDavClient::abort(Sync::SyncStatus status) {
+bool CalDavClient::abort(Sync::SyncStatus status)
+{
     Q_UNUSED(status)
-    emit syncFinished (Sync::SYNC_ABORTED);
+    emit syncFinished(Sync::SYNC_ABORTED);
     return true;
 }
 
-bool CalDavClient::cleanUp() {
+bool CalDavClient::cleanUp()
+{
     FUNCTION_CALL_TRACE;
     QStringList accountList = iProfile.keyValues(Buteo::KEY_ACCOUNT_ID);
     int accountId = 0;
@@ -178,14 +186,15 @@ bool CalDavClient::cleanUp() {
             accountId = aId.toInt();
         }
     }
-    mKCal::ExtendedCalendar::Ptr calendar = mKCal::ExtendedCalendar::Ptr (new mKCal::ExtendedCalendar(KDateTime::Spec::LocalZone()));
+
+    mKCal::ExtendedCalendar::Ptr calendar = mKCal::ExtendedCalendar::Ptr(new mKCal::ExtendedCalendar(KDateTime::Spec::LocalZone()));
     mKCal::ExtendedStorage::Ptr storage = calendar->defaultStorage(calendar);
     storage->open();
     QString aId = QString::number(accountId);
     QString nbUid;
     mKCal::Notebook::List notebookList = storage->notebooks();
     LOG_DEBUG("Total Number of Notebooks in device = " << notebookList.count());
-    foreach (mKCal::Notebook::Ptr nbPtr, notebookList) {
+    Q_FOREACH (mKCal::Notebook::Ptr nbPtr, notebookList) {
         if(nbPtr->account() == aId) {
             nbUid = nbPtr->uid();
             storage->loadNotebookIncidences(nbUid);
@@ -207,15 +216,15 @@ bool CalDavClient::cleanUp() {
     return true;
 }
 
-void CalDavClient::connectivityStateChanged(Sync::ConnectivityType aType, bool aState) {
+void CalDavClient::connectivityStateChanged(Sync::ConnectivityType aType, bool aState)
+{
     FUNCTION_CALL_TRACE;
     LOG_DEBUG("Received connectivity change event:" << aType << " changed to " << aState);
 }
 
-bool CalDavClient::initConfig () {
-
+bool CalDavClient::initConfig()
+{
     FUNCTION_CALL_TRACE;
-
     LOG_DEBUG("Initiating config...");
 
     mAccountId = 0;
@@ -263,15 +272,15 @@ void CalDavClient::receiveStateChanged(Sync::SyncProgressDetail aState)
 
     switch(aState) {
     case Sync::SYNC_PROGRESS_SENDING_ITEMS: {
-        emit syncProgressDetail (getProfileName(), Sync::SYNC_PROGRESS_SENDING_ITEMS);
+        emit syncProgressDetail(getProfileName(), Sync::SYNC_PROGRESS_SENDING_ITEMS);
         break;
     }
     case Sync::SYNC_PROGRESS_RECEIVING_ITEMS: {
-        emit syncProgressDetail (getProfileName(), Sync::SYNC_PROGRESS_RECEIVING_ITEMS);
+        emit syncProgressDetail(getProfileName(), Sync::SYNC_PROGRESS_RECEIVING_ITEMS);
         break;
     }
     case Sync::SYNC_PROGRESS_FINALISING: {
-        emit syncProgressDetail (getProfileName(),Sync::SYNC_PROGRESS_FINALISING);
+        emit syncProgressDetail(getProfileName(),Sync::SYNC_PROGRESS_FINALISING);
         break;
     }
     default:
@@ -283,71 +292,69 @@ void CalDavClient::receiveStateChanged(Sync::SyncProgressDetail aState)
 void CalDavClient::receiveSyncFinished(Sync::SyncStatus aState) {
     FUNCTION_CALL_TRACE;
 
-    switch(aState)
-    {
+    switch(aState) {
         case Sync::SYNC_ERROR:
         case Sync::SYNC_AUTHENTICATION_FAILURE:
         case Sync::SYNC_DATABASE_FAILURE:
         case Sync::SYNC_CONNECTION_ERROR:
-        case Sync::SYNC_NOTPOSSIBLE:
-        {
-            emit error( getProfileName(), "", aState);
+        case Sync::SYNC_NOTPOSSIBLE: {
+            emit error(getProfileName(), "", aState);
             break;
         }
         case Sync::SYNC_ABORTED:
-        case Sync::SYNC_DONE:
-        {
-            emit success( getProfileName(), QString::number(aState));
+        case Sync::SYNC_DONE: {
+            emit success(getProfileName(), QString::number(aState));
             break;
         }
         case Sync::SYNC_QUEUED:
         case Sync::SYNC_STARTED:
         case Sync::SYNC_PROGRESS:
-        default:
-        {
-            emit error( getProfileName(), "", aState);
+        default: {
+            emit error(getProfileName(), "", aState);
             break;
         }
     }
 }
 
-void CalDavClient::authenticationError() {
-    emit syncFinished (Sync::SYNC_AUTHENTICATION_FAILURE);
+void CalDavClient::authenticationError()
+{
+    emit syncFinished(Sync::SYNC_AUTHENTICATION_FAILURE);
 }
 
-const QDateTime CalDavClient::lastSyncTime() {
+const QDateTime CalDavClient::lastSyncTime()
+{
     FUNCTION_CALL_TRACE;
 
     Buteo::ProfileManager pm;
-    Buteo::SyncProfile* sp = pm.syncProfile (iProfile.name());
-    if (!sp->lastSuccessfulSyncTime().isNull ())
+    Buteo::SyncProfile* sp = pm.syncProfile(iProfile.name());
+    if (!sp->lastSuccessfulSyncTime().isNull()) {
         return sp->lastSuccessfulSyncTime().addSecs(30);
-    else
+    } else {
         return sp->lastSuccessfulSyncTime();
+    }
 }
 
-Buteo::SyncProfile::SyncDirection CalDavClient::syncDirection ()
+Buteo::SyncProfile::SyncDirection CalDavClient::syncDirection()
 {
     FUNCTION_CALL_TRACE;
     return mSyncDirection;
 }
 
-Buteo::SyncProfile::ConflictResolutionPolicy CalDavClient::conflictResolutionPolicy ()
+Buteo::SyncProfile::ConflictResolutionPolicy CalDavClient::conflictResolutionPolicy()
 {
     FUNCTION_CALL_TRACE;
     return mConflictResPolicy;
 }
 
-Buteo::SyncResults
-CalDavClient::getSyncResults() const
+Buteo::SyncResults CalDavClient::getSyncResults() const
 {
     FUNCTION_CALL_TRACE;
 
     return mResults;
 }
 
-void CalDavClient::startSlowSync() {
-
+void CalDavClient::startSlowSync()
+{
     Accounts::Manager *manager = new Accounts::Manager();
     Accounts::Account *account  = manager->account(mAccountId);
     if (account != NULL) {
@@ -356,7 +363,7 @@ void CalDavClient::startSlowSync() {
         notebook->setPluginName(getPluginName());
         notebook->setSyncProfile(getProfileName());
 
-        mKCal::ExtendedCalendar::Ptr calendar = mKCal::ExtendedCalendar::Ptr (new mKCal::ExtendedCalendar(KDateTime::Spec::LocalZone()));
+        mKCal::ExtendedCalendar::Ptr calendar = mKCal::ExtendedCalendar::Ptr(new mKCal::ExtendedCalendar(KDateTime::Spec::LocalZone()));
         mKCal::ExtendedStorage::Ptr storage = calendar->defaultStorage(calendar);
         storage->open();
         bool status = storage->addNotebook(notebook);
@@ -372,9 +379,9 @@ void CalDavClient::startSlowSync() {
     }
 }
 
-void CalDavClient::startQuickSync() {
-
-    mKCal::ExtendedCalendar::Ptr calendar = mKCal::ExtendedCalendar::Ptr ( new mKCal::ExtendedCalendar( KDateTime::Spec::LocalZone() ) );
+void CalDavClient::startQuickSync()
+{
+    mKCal::ExtendedCalendar::Ptr calendar = mKCal::ExtendedCalendar::Ptr(new mKCal::ExtendedCalendar(KDateTime::Spec::LocalZone()));
     mKCal::ExtendedStorage::Ptr storage = calendar->defaultStorage(calendar);
 
     storage->open();
@@ -436,6 +443,7 @@ void CalDavClient::startQuickSync() {
     connect(report, SIGNAL(syncError(Sync::SyncStatus)), this, SIGNAL(syncFinished(Sync::SyncStatus)));
 }
 
-void CalDavClient::requestFinished() {
+void CalDavClient::requestFinished()
+{
     emit syncFinished(Sync::SYNC_DONE);
 }

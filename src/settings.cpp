@@ -24,61 +24,73 @@
 #include "settings.h"
 
 Settings::Settings()
-    : mIgnoreSSLErrors(false), mOAuthToken(""),
-      mUrl(""), mUsername(""), mPassword(""),
-      mAccountId(0)
+    : mAccountId(0)
+    , mIgnoreSSLErrors(false)
 {
 }
 
-QString Settings::authToken() {
+QString Settings::authToken()
+{
     return mOAuthToken;
 }
 
-void Settings::setAuthToken(QString token) {
+void Settings::setAuthToken(const QString & token)
+{
     mOAuthToken = token;
 }
 
-bool Settings::ignoreSSLErrors() {
+bool Settings::ignoreSSLErrors()
+{
     return mIgnoreSSLErrors;
 }
 
-void Settings::setIgnoreSSLErrors(bool ignore) {
+void Settings::setIgnoreSSLErrors(bool ignore)
+{
     mIgnoreSSLErrors = ignore;
 }
 
-QString Settings::password() {
+QString Settings::password()
+{
     return mPassword;
 }
 
-void Settings::setPassword(QString password) {
+void Settings::setPassword(const QString & password)
+{
     mPassword = password;
 }
 
-QString Settings::username() {
+QString Settings::username()
+{
     return mUsername;
 }
 
-void Settings::setUsername(QString username) {
+void Settings::setUsername(const QString & username)
+{
     mUsername = username;
 }
 
-void Settings::setUrl(QString url) {
+void Settings::setUrl(const QString & url)
+{
     mUrlString = url;
     mUrl.setUrl(url);
 }
 
-QString Settings::url() {
+QString Settings::url()
+{
     return mUrlString;
 }
 
-QUrl Settings::makeUrl() {
+QUrl Settings::makeUrl()
+{
     return mUrl;
 }
 
-void Settings::setAccountId(quint32 accountId) {
+void Settings::setAccountId(quint32 accountId)
+{
     mAccountId = accountId;
 }
 
-quint32 Settings::accountId() {
+quint32 Settings::accountId()
+{
     return mAccountId;
 }

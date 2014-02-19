@@ -21,8 +21,8 @@
  *
  */
 
-#ifndef GAUTH_H
-#define GAUTH_H
+#ifndef AUTHHANDLER_H
+#define AUTHHANDLER_H
 
 #include <QObject>
 
@@ -37,47 +37,34 @@ class AuthHandler : public QObject
 {
     Q_OBJECT
 public:
-    explicit AuthHandler(const quint32 accountId, const QString scope, QObject *parent = 0);
+    explicit AuthHandler(const quint32 accountId, const QString &scope, QObject *parent = 0);
 
     void authenticate();
-
     const QString token();
-
     bool init();
-
     const QString username();
-
     const QString password();
 
-signals:
+Q_SIGNALS:
     void success();
     void failed();
 
 private:
     void getToken();
-
-    void processTokenResponse(const QByteArray tokenJSON);
-
+    void processTokenResponse(const QByteArray &tokenJSON);
     void deviceAuth();
-
-    void processDeviceCode(const QByteArray deviceCodeJSON);
+    void processDeviceCode(const QByteArray &deviceCodeJSON);
 
     QString	iDeviceCode;
-
     QString iUserCode;
-
     QString iVerificationURL;
-
     QString iToken;
 
     QString storedKeyValue(const char *provider, const char *service, const char *keyName);
 
-public slots:
-
+private Q_SLOTS:
     void credentialsStored(const quint32);
-
     void error(const SignOn::Error &);
-
     void sessionResponse(const SignOn::SessionData &);
 
 private:
@@ -91,4 +78,4 @@ private:
     QString mMethod, mMechanism;
 };
 
-#endif // GAUTH_H
+#endif // AUTHHANDLER_H

@@ -23,34 +23,42 @@
 
 #include "cditem.h"
 
-void CDItem::setHref(QString href) {
+void CDItem::setHref(const QString &href)
+{
     mHref = href;
 }
 
-QString CDItem::href() {
+QString CDItem::href()
+{
     return mHref;
 }
 
-void CDItem::setStatus(QString status) {
+void CDItem::setStatus(const QString &status)
+{
     mStatus = status;
 }
 
-QString CDItem::status() {
+QString CDItem::status()
+{
     return mStatus;
 }
 
-void CDItem::setIncidence(KCalCore::Incidence::Ptr iPtr) {
+void CDItem::setIncidence(KCalCore::Incidence::Ptr iPtr)
+{
     mIncidencePtr = iPtr;
 }
 
-KCalCore::Incidence::Ptr CDItem::incidencePtr() {
+KCalCore::Incidence::Ptr CDItem::incidencePtr()
+{
     return mIncidencePtr;
 }
 
-void CDItem::setETag(QString etag) {
+void CDItem::setETag(const QString &etag)
+{
     mETag = etag;
 }
 
-QString CDItem::etag() {
+QString CDItem::etag()
+{
     return mETag;
 }

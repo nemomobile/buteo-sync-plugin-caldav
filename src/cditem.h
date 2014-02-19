@@ -24,6 +24,8 @@
 #ifndef CDITEM_H
 #define CDITEM_H
 
+#include <QString>
+
 #include <incidence.h>
 
 class CDItem
@@ -31,16 +33,16 @@ class CDItem
 public:
     CDItem() {}
 
-    void setHref(QString href);
+    void setHref(const QString &href);
     QString href();
 
-    void setStatus(QString status);
+    void setStatus(const QString &status);
     QString status();
 
     void setIncidence(KCalCore::Incidence::Ptr iPtr);
     KCalCore::Incidence::Ptr incidencePtr();
 
-    void setETag(QString etag);
+    void setETag(const QString &etag);
     QString etag();
 
 private:

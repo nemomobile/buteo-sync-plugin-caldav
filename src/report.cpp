@@ -43,13 +43,14 @@
 #include <extendedstorage.h>
 #include <notebook.h>
 
-Report::Report(QNetworkAccessManager *manager, Settings *settings, QObject *parent) :
-    Request(manager, settings, "REPORT", parent)
+Report::Report(QNetworkAccessManager *manager, Settings *settings, QObject *parent)
+    : Request(manager, settings, "REPORT", parent)
 {
     FUNCTION_CALL_TRACE;
 }
 
-void Report::getAllEvents() {
+void Report::getAllEvents()
+{
     QNetworkRequest request;
     QUrl url(mSettings->url());
     if (!mSettings->authToken().isEmpty()) {
@@ -79,7 +80,8 @@ void Report::getAllEvents() {
             this, SLOT(slotSslErrors(QList<QSslError>)));
 }
 
-void Report::getAllETags() {
+void Report::getAllETags()
+{
     QNetworkRequest request;
     QUrl url(mSettings->url());
     if (!mSettings->authToken().isEmpty()) {
@@ -109,7 +111,8 @@ void Report::getAllETags() {
             this, SLOT(slotSslErrors(QList<QSslError>)));
 }
 
-void Report::multiGetEvents(const QStringList eventIdList, bool includeCalendarData) {
+void Report::multiGetEvents(const QStringList &eventIdList, bool includeCalendarData)
+{
     if (eventIdList.isEmpty()) return;
 
     QNetworkRequest request;
@@ -133,7 +136,7 @@ void Report::multiGetEvents(const QStringList eventIdList, bool includeCalendarD
 
     multiGetRequest.append("</d:prop>");
 
-    foreach (QString eventId , eventIdList) {
+    Q_FOREACH (const QString &eventId , eventIdList) {
         multiGetRequest.append("<d:href>");
         multiGetRequest.append(eventId);
         multiGetRequest.append("</d:href>");
@@ -155,7 +158,8 @@ void Report::multiGetEvents(const QStringList eventIdList, bool includeCalendarD
             this, SLOT(slotSslErrors(QList<QSslError>)));
 }
 
-void Report::processEvents() {
+void Report::processEvents()
+{
     QByteArray data = mNReply->readAll();
     if (!data.isNull() && !data.isEmpty()) {
         Reader reader;
@@ -163,14 +167,14 @@ void Report::processEvents() {
         LOG_DEBUG("Total content length of the data = " << data.length());
         LOG_DEBUG(data);
         QHash<QString, CDItem*> map = reader.getIncidenceMap();
-        mKCal::ExtendedCalendar::Ptr calendar = mKCal::ExtendedCalendar::Ptr (new mKCal::ExtendedCalendar(KDateTime::Spec::LocalZone()));
+        mKCal::ExtendedCalendar::Ptr calendar = mKCal::ExtendedCalendar::Ptr(new mKCal::ExtendedCalendar(KDateTime::Spec::LocalZone()));
         mKCal::ExtendedStorage::Ptr storage = calendar->defaultStorage(calendar);
         storage->open();
         QString aId = QString::number(mSettings->accountId());
         QString nbUid;
         mKCal::Notebook::List notebookList = storage->notebooks();
         LOG_DEBUG("Total Number of Notebooks in device = " << notebookList.count());
-        foreach (mKCal::Notebook::Ptr nbPtr, notebookList) {
+        Q_FOREACH (mKCal::Notebook::Ptr nbPtr, notebookList) {
             LOG_DEBUG(nbPtr->uid() << "     Notebook's' Account ID " << nbPtr->account() << "    Looking for Account ID = " << aId);
             if(nbPtr->account() == aId) {
                 nbUid = nbPtr->uid();
@@ -219,7 +223,7 @@ void Report::processEvents() {
                         origEvent->setSecrecy(event->secrecy());
                         KCalCore::Attendee::List attendeeList = event->attendees();
                         origEvent->clearAttendees();
-                        foreach(KCalCore::Attendee::Ptr attendee , attendeeList) {
+                        Q_FOREACH (KCalCore::Attendee::Ptr attendee , attendeeList) {
                             origEvent->addAttendee(attendee);
                         }
                         origEvent->endUpdates();
@@ -271,9 +275,10 @@ void Report::processEvents() {
     emit finished();
 }
 
-void Report::processETags() {
-    QVariant statusCode = mNReply->attribute( QNetworkRequest::HttpStatusCodeAttribute );
-    if (statusCode.isValid() ) {
+void Report::processETags()
+{
+    QVariant statusCode = mNReply->attribute(QNetworkRequest::HttpStatusCodeAttribute);
+    if (statusCode.isValid()) {
         int status = statusCode.toInt();
         if (status > 299) {
             return;
@@ -288,14 +293,14 @@ void Report::processETags() {
         LOG_DEBUG("Total content length of the data = " << data.length());
         QHash<QString, CDItem*> map = reader.getIncidenceMap();
         QStringList eventIdList;
-        mKCal::ExtendedCalendar::Ptr calendar = mKCal::ExtendedCalendar::Ptr (new mKCal::ExtendedCalendar(KDateTime::Spec::LocalZone()));
+        mKCal::ExtendedCalendar::Ptr calendar = mKCal::ExtendedCalendar::Ptr(new mKCal::ExtendedCalendar(KDateTime::Spec::LocalZone()));
         mKCal::ExtendedStorage::Ptr storage = calendar->defaultStorage(calendar);
         storage->open();
         QString aId = QString::number(mSettings->accountId());
         QString nbUid;
         mKCal::Notebook::List notebookList = storage->notebooks();
         LOG_DEBUG("Total Number of Notebooks in device = " << notebookList.count());
-        foreach (mKCal::Notebook::Ptr nbPtr, notebookList) {
+        Q_FOREACH (mKCal::Notebook::Ptr nbPtr, notebookList) {
             if(nbPtr->account() == aId) {
                 nbUid = nbPtr->uid();
             }
@@ -314,8 +319,7 @@ void Report::processETags() {
         KCalCore::Event::Ptr event ;
         KCalCore::Todo::Ptr todo ;
         KCalCore::Journal::Ptr journal ;
-        foreach(KCalCore::Incidence::Ptr incidence , incidenceList) {
-
+        Q_FOREACH (KCalCore::Incidence::Ptr incidence , incidenceList) {
             QString uri = incidence->customProperty("buteo", "uri");
             if (uri == NULL || uri.isEmpty()) {
                 //Newly added to Local DB -- Skip this incidence
@@ -363,19 +367,20 @@ void Report::processETags() {
     }
 }
 
-void Report::updateETags() {
+void Report::updateETags()
+{
     QByteArray data = mNReply->readAll();
     if (!data.isNull() && !data.isEmpty()) {
         Reader reader;
         reader.read(data);
         LOG_DEBUG("Total content length of the data = " << data.length());
         QHash<QString, CDItem*> map = reader.getIncidenceMap();
-        mKCal::ExtendedCalendar::Ptr calendar = mKCal::ExtendedCalendar::Ptr (new mKCal::ExtendedCalendar(KDateTime::Spec::LocalZone()));
+        mKCal::ExtendedCalendar::Ptr calendar = mKCal::ExtendedCalendar::Ptr(new mKCal::ExtendedCalendar(KDateTime::Spec::LocalZone()));
         mKCal::ExtendedStorage::Ptr storage = calendar->defaultStorage(calendar);
         storage->open();
         storage->load();
-        KCalCore::Event::Ptr event ;
-        KCalCore::Todo::Ptr todo ;
+        KCalCore::Event::Ptr event;
+        KCalCore::Todo::Ptr todo;
         KCalCore::Journal::Ptr journal;
         QHash<QString, CDItem*>::const_iterator iter = map.constBegin();
         while(iter != map.constEnd()) {
@@ -416,7 +421,8 @@ void Report::updateETags() {
     emit finished();
 }
 
-void Report::slotError(QNetworkReply::NetworkError error) {
+void Report::slotError(QNetworkReply::NetworkError error)
+{
     qDebug() << "Error # " << error;
     if (error <= 200) {
         emit syncError(Sync::SYNC_CONNECTION_ERROR);
@@ -427,7 +433,8 @@ void Report::slotError(QNetworkReply::NetworkError error) {
     }
 }
 
-void Report::slotSslErrors(QList<QSslError> errors) {
+void Report::slotSslErrors(QList<QSslError> errors)
+{
     qDebug() << "SSL Error";
     if (mSettings->ignoreSSLErrors()) {
         mNReply->ignoreSslErrors(errors);

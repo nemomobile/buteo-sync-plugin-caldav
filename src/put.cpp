@@ -35,13 +35,13 @@
 #include <incidence.h>
 #include <icalformat.h>
 
-Put::Put(QNetworkAccessManager *manager, Settings *settings, QObject *parent) :
-    Request(manager, settings, "PUT", parent)
+Put::Put(QNetworkAccessManager *manager, Settings *settings, QObject *parent)
+    : Request(manager, settings, "PUT", parent)
 {
 }
 
-void Put::updateEvent(KCalCore::Incidence::Ptr incidence) {
-
+void Put::updateEvent(KCalCore::Incidence::Ptr incidence)
+{
     KCalCore::ICalFormat *icalFormat = new KCalCore::ICalFormat;
     QString data = icalFormat->toICalString(incidence);
     if (data == NULL || data.isEmpty()) {
@@ -55,7 +55,8 @@ void Put::updateEvent(KCalCore::Incidence::Ptr incidence) {
     QUrl url(mSettings->makeUrl().host() + uri);
 
     if (!mSettings->authToken().isEmpty()) {
-        request.setRawHeader(QString("Authorization").toLatin1(), QString("Bearer " + mSettings->authToken()).toLatin1());
+        request.setRawHeader(QString("Authorization").toLatin1(),
+                             QString("Bearer " + mSettings->authToken()).toLatin1());
     } else {
         url.setUserName(mSettings->username());
         url.setPassword(mSettings->password());
@@ -73,11 +74,10 @@ void Put::updateEvent(KCalCore::Incidence::Ptr incidence) {
             this, SLOT(slotError(QNetworkReply::NetworkError)));
     connect(mNReply, SIGNAL(sslErrors(QList<QSslError>)),
             this, SLOT(slotSslErrors(QList<QSslError>)));
-
 }
 
-void Put::createEvent(KCalCore::Incidence::Ptr incidence) {
-
+void Put::createEvent(KCalCore::Incidence::Ptr incidence)
+{
     KCalCore::ICalFormat *icalFormat = new KCalCore::ICalFormat;
     QString ical = icalFormat->toICalString(incidence);
     if (ical == NULL) {
@@ -110,10 +110,10 @@ void Put::createEvent(KCalCore::Incidence::Ptr incidence) {
             this, SLOT(slotError(QNetworkReply::NetworkError)));
     connect(mNReply, SIGNAL(sslErrors(QList<QSslError>)),
             this, SLOT(slotSslErrors(QList<QSslError>)));
-
 }
 
-void Put::requestFinished() {
+void Put::requestFinished()
+{
     LOG_DEBUG("PUT Request Finished............" << mNReply->readAll());
     qDebug() << "------------------------PUT Finished-----------------------\n" << mNReply->readAll();
     QVariant statusCode = mNReply->attribute( QNetworkRequest::HttpStatusCodeAttribute );
@@ -130,13 +130,14 @@ void Put::requestFinished() {
         }
     }
     const QList<QByteArray>& rawHeaderList(mNReply->rawHeaderList());
-    foreach (QByteArray rawHeader, rawHeaderList) {
+    Q_FOREACH (const QByteArray &rawHeader, rawHeaderList) {
         qDebug() << rawHeader << " : " << mNReply->rawHeader(rawHeader);
     }
     qDebug() << "---------------------------------------------------------------------\n";
 }
 
-void Put::slotError(QNetworkReply::NetworkError error) {
+void Put::slotError(QNetworkReply::NetworkError error)
+{
     qDebug() << "Error # " << error;
     if (error <= 200) {
         emit syncError(Sync::SYNC_CONNECTION_ERROR);
@@ -147,7 +148,8 @@ void Put::slotError(QNetworkReply::NetworkError error) {
     }
 }
 
-void Put::slotSslErrors(QList<QSslError> errors) {
+void Put::slotSslErrors(QList<QSslError> errors)
+{
     qDebug() << "SSL Error";
     if (mSettings->ignoreSSLErrors()) {
         mNReply->ignoreSslErrors(errors);

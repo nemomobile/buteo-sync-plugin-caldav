@@ -53,15 +53,16 @@ const QString AUTH                  ("auth");
 const QString AUTH_METHOD           ("method");
 const QString MECHANISM             ("mechanism");
 
-AuthHandler::AuthHandler(const quint32 accountId, const QString scope, QObject *parent)
-                          :QObject(parent)
+AuthHandler::AuthHandler(const quint32 accountId, const QString &scope, QObject *parent)
+    : QObject(parent)
 {
     Manager *manager = new Manager();
     mAccount = manager->account(accountId);
     mScope = scope;
 }
 
-bool AuthHandler::init() {
+bool AuthHandler::init()
+{
     if (mAccount == NULL) {
         LOG_DEBUG("Account is not created... Cannot authenticate");
         return false;
@@ -104,15 +105,17 @@ bool AuthHandler::init() {
     return true;
 }
 
-void AuthHandler::sessionResponse(const SessionData &sessionData) {
+void AuthHandler::sessionResponse(const SessionData &sessionData)
+{
     if (mMethod.compare("password", Qt::CaseInsensitive) == 0) {
         QStringList propertyList = sessionData.propertyNames();
-        foreach (const QString &propertyName, propertyList) {
+        Q_FOREACH (const QString &propertyName, propertyList) {
             LOG_DEBUG(propertyName << sessionData.getProperty(propertyName).toString());
-            if (propertyName.compare("username", Qt::CaseInsensitive) == 0)
+            if (propertyName.compare("username", Qt::CaseInsensitive) == 0) {
                 mUsername = sessionData.getProperty( propertyName ).toString();
-            else if (propertyName.compare("secret", Qt::CaseInsensitive) == 0)
+            } else if (propertyName.compare("secret", Qt::CaseInsensitive) == 0) {
                 mPassword = sessionData.getProperty( propertyName ).toString();
+            }
         }
     } else if (mMethod.compare("oauth2", Qt::CaseInsensitive) == 0) {
         OAuth2PluginNS::OAuth2PluginTokenData response = sessionData.data<OAuth2PluginNS::OAuth2PluginTokenData>();
@@ -128,15 +131,18 @@ void AuthHandler::sessionResponse(const SessionData &sessionData) {
     emit success();
 }
 
-const QString AuthHandler::token() {
+const QString AuthHandler::token()
+{
     return mToken;
 }
 
-const QString AuthHandler::username() {
+const QString AuthHandler::username()
+{
     return mUsername;
 }
 
-const QString AuthHandler::password() {
+const QString AuthHandler::password()
+{
     return mPassword;
 }
 
@@ -186,19 +192,22 @@ void AuthHandler::authenticate()
     }
 }
 
-void AuthHandler::credentialsStored(const quint32 id) {
+void AuthHandler::credentialsStored(const quint32 id)
+{
     mAccount->setCredentialsId(id);
     mAccount->sync();
 }
 
-void AuthHandler::error(const SignOn::Error & error) {
+void AuthHandler::error(const SignOn::Error & error)
+{
     printf(error.message().toStdString().c_str());
     qDebug() << error.message();
 
     emit failed();
 }
 
-QString AuthHandler::storedKeyValue(const char *provider, const char *service, const char *keyName) {
+QString AuthHandler::storedKeyValue(const char *provider, const char *service, const char *keyName)
+{
     char *storedKey = NULL;
     QString retn;
 

@@ -33,18 +33,18 @@ public:
     Settings();
 
     QString authToken();
-    void setAuthToken(QString token);
+    void setAuthToken(const QString &token);
 
-    void setUsername(QString username);
+    void setUsername(const QString &username);
     QString username();
 
-    void setPassword(QString password);
+    void setPassword(const QString &password);
     QString password();
 
     void setIgnoreSSLErrors(bool ignore);
     bool ignoreSSLErrors();
 
-    void setUrl(QString url);
+    void setUrl(const QString &url);
     QUrl makeUrl();
     QString url();
 
@@ -55,10 +55,10 @@ private:
     QString     mOAuthToken;
     QString     mUsername;
     QString     mPassword;
-    bool        mIgnoreSSLErrors;
     QString     mUrlString;
     QUrl        mUrl;
     quint32     mAccountId;
+    bool        mIgnoreSSLErrors;
 };
 
 #endif // SETTINGS_H

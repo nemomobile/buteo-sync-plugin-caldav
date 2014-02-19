@@ -34,11 +34,12 @@
 class Reader : public QObject
 {
     Q_OBJECT
+
 public:
     explicit Reader(QObject *parent = 0);
     ~Reader();
-    void read(const QByteArray data);
 
+    void read(const QByteArray &data);
     QHash<QString, CDItem *> getIncidenceMap();
 
 private:
@@ -50,16 +51,10 @@ private:
     void readStatus(CDItem *item);
     void readGetETag(CDItem *item);
     void readCalendarData(CDItem *item);
-    
-signals:
-    
-public slots:
 
 private:
     QXmlStreamReader *mReader;
-
     QHash<QString, CDItem*> mIncidenceMap;
-    
 };
 
 #endif // READER_H
