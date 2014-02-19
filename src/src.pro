@@ -2,7 +2,6 @@ TARGET = caldav-client
 TEMPLATE = lib
 
 QT       -= gui
-
 QT       += network dbus
 
 CONFIG += link_pkgconfig plugin debug console
@@ -48,23 +47,26 @@ OTHER_FILES += \
     xmls/client/caldav.xml \
     xmls/sync/caldav-sync.xml
 
-#target.path = /usr/lib/buteo-plugins-qt5
+!contains (DEFINES, BUTEO_OUT_OF_PROCESS_SUPPORT) {
+    target.path = /usr/lib/buteo-plugins-qt5
+}
 
-target.path = /usr/lib/buteo-plugins-qt5/oopp
-DEFINES += CLIENT_PLUGIN
-DEFINES += "CLASSNAME=CalDavClient"
-DEFINES += CLASSNAME_H=\\\"caldavclient.h\\\"
-INCLUDE_DIR = $$system(pkg-config --cflags buteosyncfw5|cut -f2 -d'I')
+contains (DEFINES, BUTEO_OUT_OF_PROCESS_SUPPORT) {
+    target.path = /usr/lib/buteo-plugins-qt5/oopp
+    DEFINES += CLIENT_PLUGIN
+    DEFINES += "CLASSNAME=CalDavClient"
+    DEFINES += CLASSNAME_H=\\\"caldavclient.h\\\"
+    INCLUDE_DIR = $$system(pkg-config --cflags buteosyncfw5|cut -f2 -d'I')
 
-HEADERS += $$INCLUDE_DIR/ButeoPluginIfAdaptor.h   \
-           $$INCLUDE_DIR/PluginCbImpl.h           \
-           $$INCLUDE_DIR/PluginServiceObj.h
+    HEADERS += $$INCLUDE_DIR/ButeoPluginIfAdaptor.h   \
+               $$INCLUDE_DIR/PluginCbImpl.h           \
+               $$INCLUDE_DIR/PluginServiceObj.h
 
-SOURCES += $$INCLUDE_DIR/ButeoPluginIfAdaptor.cpp \
-           $$INCLUDE_DIR/PluginCbImpl.cpp         \
-           $$INCLUDE_DIR/PluginServiceObj.cpp     \
-           $$INCLUDE_DIR/plugin_main.cpp
-
+    SOURCES += $$INCLUDE_DIR/ButeoPluginIfAdaptor.cpp \
+               $$INCLUDE_DIR/PluginCbImpl.cpp         \
+               $$INCLUDE_DIR/PluginServiceObj.cpp     \
+               $$INCLUDE_DIR/plugin_main.cpp
+}
 
 sync.path = /etc/buteo/profiles/sync
 sync.files = xmls/sync/*
