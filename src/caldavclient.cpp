@@ -385,7 +385,7 @@ void CalDavClient::startQuickSync()
     mKCal::ExtendedStorage::Ptr storage = calendar->defaultStorage(calendar);
 
     storage->open();
-    storage->load(QDateTime::currentDateTime().addMonths(-6).date(), QDateTime::currentDateTime().addMonths(-6).date());
+    storage->load(QDateTime::currentDateTime().addMonths(-6).date(), QDateTime::currentDateTime().addMonths(12).date());
     KCalCore::Incidence::List *list = new KCalCore::Incidence::List();
     LOG_DEBUG("\n\n------------------>>>>>>>>>>>>>>>>> LAST SYNC TIME = " << lastSyncTime() << "\n\n\n\n");
     KDateTime date(lastSyncTime());
