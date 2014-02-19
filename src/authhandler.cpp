@@ -173,8 +173,9 @@ void AuthHandler::authenticate()
         scope.append(val1.toStringList());
         qDebug() << scope << "\n";
 
-        QString clientId = storedKeyValue("google", "google", "client_id");
-        QString clientSecret = storedKeyValue("google", "google", "client_secret");
+        QByteArray providerName = mAccount->providerName().toLatin1();
+        QString clientId = storedKeyValue(providerName.constData(), "caldav", "client_id");
+        QString clientSecret = storedKeyValue(providerName.constData(), "caldav", "client_secret");
         OAuth2PluginNS::OAuth2PluginData data;
         data.setClientId(clientId);
         data.setClientSecret(clientSecret);
