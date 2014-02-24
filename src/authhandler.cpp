@@ -83,6 +83,11 @@ bool AuthHandler::init()
         info->setType(IdentityInfo::Application);
 
         mIdentity = Identity::newIdentity(*info);
+        if (!mIdentity) {
+            LOG_DEBUG("Identity could not be created for account");
+            return false;
+        }
+
         connect(mIdentity, SIGNAL(credentialsStored(const quint32)),
                 this, SLOT(credentialsStored(const quint32)));
         connect(mIdentity, SIGNAL(error(const SignOn::Error &)),
@@ -94,6 +99,10 @@ bool AuthHandler::init()
     }
 
     mSession = mIdentity->createSession(mMethod.toLatin1());
+    if (!mSession) {
+        LOG_DEBUG("Signon session could not be created with method" << mMethod);
+        return false;
+    }
 
     connect(mSession, SIGNAL(response(const SignOn::SessionData &)),
             this, SLOT(sessionResponse(const SignOn::SessionData &)));
