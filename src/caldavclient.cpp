@@ -244,6 +244,10 @@ bool CalDavClient::initConfig()
     if (!remotePaths.isEmpty()) {
         remoteDatabasePath = remotePaths.first();
     }
+    // caldav plugin relies on the path ending with a separator
+    if (!remoteDatabasePath.endsWith('/')) {
+        remoteDatabasePath += '/';
+    }
     if (!mManager) {
         mManager = new Accounts::Manager(this);
     }
