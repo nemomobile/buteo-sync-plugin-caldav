@@ -71,8 +71,7 @@ private Q_SLOTS:
 private:
     void startSlowSync();
     void startQuickSync();
-    const QDateTime lastSyncTime();
-    const QString authToken();
+    QDateTime lastSyncTime();
     bool abort(Sync::SyncStatus status);
     bool initConfig();
     void closeConfig();

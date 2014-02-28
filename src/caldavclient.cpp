@@ -357,19 +357,9 @@ void CalDavClient::authenticationError()
     syncFinished(Sync::SYNC_AUTHENTICATION_FAILURE);
 }
 
-const QDateTime CalDavClient::lastSyncTime()
+QDateTime CalDavClient::lastSyncTime()
 {
-    FUNCTION_CALL_TRACE;
-
-    Buteo::ProfileManager pm;
-    Buteo::SyncProfile* sp = pm.syncProfile(iProfile.name());
-    if (!sp->lastSuccessfulSyncTime().isNull()) {
-        // we add 2 seconds to ensure that the timestamp doesn't
-        // fall prior to when the calendar db commit fs sync finalises.
-        return sp->lastSuccessfulSyncTime().addSecs(2).toUTC();
-    } else {
-        return sp->lastSuccessfulSyncTime();
-    }
+    return iProfile.lastSuccessfulSyncTime();
 }
 
 Buteo::SyncProfile::SyncDirection CalDavClient::syncDirection()
@@ -432,8 +422,12 @@ void CalDavClient::startQuickSync()
     storage->load(QDateTime::currentDateTime().toUTC().addMonths(-6).date(),
                   QDateTime::currentDateTime().toUTC().addMonths(12).date());
     KCalCore::Incidence::List *list = new KCalCore::Incidence::List();
-    LOG_DEBUG("\n\n------------------>>>>>>>>>>>>>>>>> LAST SYNC TIME = " << lastSyncTime() << "\n\n\n\n");
-    KDateTime date(lastSyncTime());
+
+    // we add 2 seconds to ensure that the timestamp doesn't
+    // fall prior to when the calendar db commit fs sync finalises.
+    KDateTime date(lastSyncTime().addSecs(2));
+
+    LOG_DEBUG("\n\n------------------>>>>>>>>>>>>>>>>> LAST SYNC TIME = " << date.toString() << "\n\n\n\n");
 
     LOG_DEBUG("Inserted incidences:" << storage->insertedIncidences(list, date));
     LOG_DEBUG("Total Inserted incidences = " << list->count());
