@@ -54,7 +54,17 @@ void Put::updateEvent(KCalCore::Incidence::Ptr incidence)
     QString uri  = incidence->customProperty("buteo", "uri");
     mUidList.append(incidence->uid());
     QNetworkRequest request;
-    QUrl url(mSettings->makeUrl().host() + uri);
+
+    // Get a URL of the server + path + filename.
+    // Settings::makeUrl() has server+path and 'uri' has path+filename, so strip
+    // the path from url and use the one from 'uri'.
+    QUrl url = mSettings->makeUrl();
+    QString urlString = url.toString();
+    int urlPathIndex = urlString.indexOf(url.path());
+    if (urlPathIndex >= 0) {
+        urlString = urlString.mid(0, urlPathIndex);
+    }
+    url.setUrl(urlString + uri);
 
     if (!mSettings->authToken().isEmpty()) {
         request.setRawHeader(QString("Authorization").toLatin1(),
