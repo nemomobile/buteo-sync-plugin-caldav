@@ -37,32 +37,25 @@
 class Request : public QObject
 {
     Q_OBJECT
-
 public:
-    explicit Request(QNetworkAccessManager *manager, Settings *settings,
-                     const QString &requestType, QObject *parent = 0) :
-        QObject(parent), mNAManager(manager), REQUEST_TYPE(requestType), mSettings(settings)
-    {    FUNCTION_CALL_TRACE;  }
+    explicit Request(QNetworkAccessManager *manager,
+                     Settings *settings,
+                     const QString &requestType,
+                     QObject *parent = 0);
 
 Q_SIGNALS:
     void finished();
     void syncError(Sync::SyncStatus);
 
 protected Q_SLOTS:
-    virtual void slotError(QNetworkReply::NetworkError) = 0;
-    virtual void slotSslErrors(QList<QSslError>) = 0;
+    virtual void slotError(QNetworkReply::NetworkError);
+    virtual void slotSslErrors(QList<QSslError>);
 
 protected:
-    void debugRequest(const QNetworkRequest &request, const QByteArray &data) {
-        qDebug() << "-----------------------------------------------\n";
-        const QList<QByteArray>& rawHeaderList(request.rawHeaderList());
-        Q_FOREACH (const QByteArray &rawHeader, rawHeaderList) {
-            qDebug() << rawHeader << " : " << request.rawHeader(rawHeader);
-        }
-        qDebug() << "URL = " << request.url();
-        qDebug() << "Request : \n" << data;
-        qDebug() << "---------------------------------------------------------------------\n";
-    }
+    void debugRequest(const QNetworkRequest &request, const QByteArray &data);
+    void debugRequest(const QNetworkRequest &request, const QString &data);
+    void debugReply(const QNetworkReply &reply, const QByteArray &data);
+    void debugReplyAndReadAll(QNetworkReply *reply);
 
     QNetworkAccessManager *mNAManager;
     QNetworkReply *mNReply;

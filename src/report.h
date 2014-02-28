@@ -44,12 +44,10 @@ public:
     void getAllETags();
     void multiGetEvents(const QStringList &eventIdList, bool includeCalendarData);
 
-public Q_SLOTS:
+private Q_SLOTS:
     void processEvents();
     void processETags();
     void updateETags();
-    void slotError(QNetworkReply::NetworkError err);
-    void slotSslErrors(QList<QSslError> errors);
 };
 
 #endif // REPORT_H

@@ -361,6 +361,8 @@ Buteo::SyncResults CalDavClient::getSyncResults() const
 
 void CalDavClient::startSlowSync()
 {
+    FUNCTION_CALL_TRACE;
+
     if (!mManager) {
         mManager = new Accounts::Manager(this);
     }
@@ -389,6 +391,8 @@ void CalDavClient::startSlowSync()
 
 void CalDavClient::startQuickSync()
 {
+    FUNCTION_CALL_TRACE;
+
     mKCal::ExtendedCalendar::Ptr calendar = mKCal::ExtendedCalendar::Ptr(new mKCal::ExtendedCalendar(KDateTime::Spec::UTC()));
     mKCal::ExtendedStorage::Ptr storage = calendar->defaultStorage(calendar);
 
@@ -399,8 +403,8 @@ void CalDavClient::startQuickSync()
     LOG_DEBUG("\n\n------------------>>>>>>>>>>>>>>>>> LAST SYNC TIME = " << lastSyncTime() << "\n\n\n\n");
     KDateTime date(lastSyncTime());
 
-    qDebug() << storage->insertedIncidences(list, date);
-    qDebug() << "Total Inserted incidences = " << list->count();
+    LOG_DEBUG("Inserted incidences:" << storage->insertedIncidences(list, date));
+    LOG_DEBUG("Total Inserted incidences = " << list->count());
     int count = list->count();
     for(int index = 0; index < count; index++) {
         KCalCore::Incidence::Ptr incidence = list->at(index);
@@ -411,8 +415,8 @@ void CalDavClient::startQuickSync()
     }
 
     list->clear();
-    qDebug() << storage->modifiedIncidences(list, date);
-    qDebug() << "Total Modified incidences = " << list->count();
+    LOG_DEBUG("Modified incidences:" << storage->modifiedIncidences(list, date));
+    LOG_DEBUG("Total Modified incidences = " << list->count());
     count = list->count();
     for(int index = 0; index < count; index++) {
         KCalCore::Incidence::Ptr incidence = list->at(index);
@@ -423,8 +427,8 @@ void CalDavClient::startQuickSync()
     }
 
     list->clear();
-    qDebug() << storage->deletedIncidences(list, date);
-    qDebug() << "Total Deleted incidences = " << list->count();
+    LOG_DEBUG("Deleted incidences:" << storage->deletedIncidences(list, date));
+    LOG_DEBUG("Total Deleted incidences = " << list->count());
     count = list->count();
     for(int index = 0; index < count; index++) {
         KCalCore::Incidence::Ptr incidence = list->at(index);

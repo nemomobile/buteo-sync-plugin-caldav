@@ -42,6 +42,8 @@ Put::Put(QNetworkAccessManager *manager, Settings *settings, QObject *parent)
 
 void Put::updateEvent(KCalCore::Incidence::Ptr incidence)
 {
+    FUNCTION_CALL_TRACE;
+
     KCalCore::ICalFormat *icalFormat = new KCalCore::ICalFormat;
     QString data = icalFormat->toICalString(incidence);
     if (data == NULL || data.isEmpty()) {
@@ -68,7 +70,7 @@ void Put::updateEvent(KCalCore::Incidence::Ptr incidence)
     QBuffer *buffer = new QBuffer;
     buffer->setData(data.toLatin1());
     mNReply = mNAManager->sendCustomRequest(request, REQUEST_TYPE.toLatin1(), buffer);
-    debugRequest(request, data.toLatin1());
+    debugRequest(request, data);
     connect(mNReply, SIGNAL(finished()), this, SLOT(requestFinished()));
     connect(mNReply, SIGNAL(error(QNetworkReply::NetworkError)),
             this, SLOT(slotError(QNetworkReply::NetworkError)));
@@ -78,6 +80,8 @@ void Put::updateEvent(KCalCore::Incidence::Ptr incidence)
 
 void Put::createEvent(KCalCore::Incidence::Ptr incidence)
 {
+    FUNCTION_CALL_TRACE;
+
     KCalCore::ICalFormat *icalFormat = new KCalCore::ICalFormat;
     QString ical = icalFormat->toICalString(incidence);
     if (ical == NULL) {
@@ -104,7 +108,7 @@ void Put::createEvent(KCalCore::Incidence::Ptr incidence)
     QBuffer *buffer = new QBuffer;
     buffer->setData(ical.toLatin1());
     mNReply = mNAManager->sendCustomRequest(request, REQUEST_TYPE.toLatin1(), buffer);
-    debugRequest(request, ical.toLatin1());
+    debugRequest(request, ical);
     connect(mNReply, SIGNAL(finished()), this, SLOT(requestFinished()));
     connect(mNReply, SIGNAL(error(QNetworkReply::NetworkError)),
             this, SLOT(slotError(QNetworkReply::NetworkError)));
@@ -114,12 +118,12 @@ void Put::createEvent(KCalCore::Incidence::Ptr incidence)
 
 void Put::requestFinished()
 {
-    LOG_DEBUG("PUT Request Finished............" << mNReply->readAll());
-    qDebug() << "------------------------PUT Finished-----------------------\n" << mNReply->readAll();
+    FUNCTION_CALL_TRACE;
+    debugReplyAndReadAll(mNReply);
+
     QVariant statusCode = mNReply->attribute( QNetworkRequest::HttpStatusCodeAttribute );
     if (statusCode.isValid() ) {
         int status = statusCode.toInt();
-        qDebug() << "Status Code : " << status << "\n";
         if (status == 201 || status == 204) {
             //Update ETag for corresponding UID
             Get *get = new Get(mNAManager, mSettings);
@@ -128,30 +132,5 @@ void Put::requestFinished()
             connect(get, SIGNAL(syncError(Sync::SyncStatus)), this, SIGNAL(syncError(Sync::SyncStatus)));
             connect(get, SIGNAL(finished()), this, SLOT(deleteLater()));
         }
-    }
-    const QList<QByteArray>& rawHeaderList(mNReply->rawHeaderList());
-    Q_FOREACH (const QByteArray &rawHeader, rawHeaderList) {
-        qDebug() << rawHeader << " : " << mNReply->rawHeader(rawHeader);
-    }
-    qDebug() << "---------------------------------------------------------------------\n";
-}
-
-void Put::slotError(QNetworkReply::NetworkError error)
-{
-    qDebug() << "Error # " << error;
-    if (error <= 200) {
-        emit syncError(Sync::SYNC_CONNECTION_ERROR);
-    } else if (error > 200 && error < 400) {
-        emit syncError(Sync::SYNC_SERVER_FAILURE);
-    } else {
-        emit syncError(Sync::SYNC_ERROR);
-    }
-}
-
-void Put::slotSslErrors(QList<QSslError> errors)
-{
-    qDebug() << "SSL Error";
-    if (mSettings->ignoreSSLErrors()) {
-        mNReply->ignoreSslErrors(errors);
     }
 }

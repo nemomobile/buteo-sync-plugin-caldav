@@ -51,6 +51,8 @@ Report::Report(QNetworkAccessManager *manager, Settings *settings, QObject *pare
 
 void Report::getAllEvents()
 {
+    FUNCTION_CALL_TRACE;
+
     QNetworkRequest request;
     QUrl url(mSettings->url());
     if (!mSettings->authToken().isEmpty()) {
@@ -82,6 +84,8 @@ void Report::getAllEvents()
 
 void Report::getAllETags()
 {
+    FUNCTION_CALL_TRACE;
+
     QNetworkRequest request;
     QUrl url(mSettings->url());
     if (!mSettings->authToken().isEmpty()) {
@@ -113,6 +117,8 @@ void Report::getAllETags()
 
 void Report::multiGetEvents(const QStringList &eventIdList, bool includeCalendarData)
 {
+    FUNCTION_CALL_TRACE;
+
     if (eventIdList.isEmpty()) return;
 
     QNetworkRequest request;
@@ -160,6 +166,8 @@ void Report::multiGetEvents(const QStringList &eventIdList, bool includeCalendar
 
 void Report::processEvents()
 {
+    FUNCTION_CALL_TRACE;
+
     QByteArray data = mNReply->readAll();
     if (!data.isNull() && !data.isEmpty()) {
         Reader reader;
@@ -181,7 +189,7 @@ void Report::processEvents()
             }
         }
         if (nbUid.isNull() || nbUid.isEmpty()) {
-            LOG_WARNING("Not able to find NoteBook's UID...... Wont Save Events ");
+            LOG_WARNING("Not able to find NoteBook's UID...... Won't Save Events ");
             emit syncError(Sync::SYNC_ERROR);
             mNReply->deleteLater();
             return;
@@ -277,6 +285,8 @@ void Report::processEvents()
 
 void Report::processETags()
 {
+    FUNCTION_CALL_TRACE;
+
     QVariant statusCode = mNReply->attribute(QNetworkRequest::HttpStatusCodeAttribute);
     if (statusCode.isValid()) {
         int status = statusCode.toInt();
@@ -306,7 +316,7 @@ void Report::processETags()
             }
         }
         if (nbUid.isNull() || nbUid.isEmpty()) {
-            LOG_WARNING("Not able to find NoteBook's UID...... Wont Save Events ");
+            LOG_WARNING("Not able to find NoteBook's UID...... Won't Save Events ");
             emit syncError(Sync::SYNC_ERROR);
             mNReply->deleteLater();
             return;
@@ -369,7 +379,11 @@ void Report::processETags()
 
 void Report::updateETags()
 {
+    FUNCTION_CALL_TRACE;
+
     QByteArray data = mNReply->readAll();
+    debugReply(*mNReply, data);
+
     if (!data.isNull() && !data.isEmpty()) {
         Reader reader;
         reader.read(data);
@@ -419,24 +433,4 @@ void Report::updateETags()
     }
 
     emit finished();
-}
-
-void Report::slotError(QNetworkReply::NetworkError error)
-{
-    qDebug() << "Error # " << error;
-    if (error <= 200) {
-        emit syncError(Sync::SYNC_CONNECTION_ERROR);
-    } else if (error > 200 && error < 400) {
-        emit syncError(Sync::SYNC_SERVER_FAILURE);
-    } else {
-        emit syncError(Sync::SYNC_ERROR);
-    }
-}
-
-void Report::slotSslErrors(QList<QSslError> errors)
-{
-    qDebug() << "SSL Error";
-    if (mSettings->ignoreSSLErrors()) {
-        mNReply->ignoreSslErrors(errors);
-    }
 }

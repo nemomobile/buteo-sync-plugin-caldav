@@ -62,6 +62,8 @@ AuthHandler::AuthHandler(Accounts::Manager *manager, const quint32 accountId, co
 
 bool AuthHandler::init()
 {
+    FUNCTION_CALL_TRACE;
+
     if (mAccount == NULL) {
         LOG_DEBUG("Account is not created... Cannot authenticate");
         return false;
@@ -115,6 +117,8 @@ bool AuthHandler::init()
 
 void AuthHandler::sessionResponse(const SessionData &sessionData)
 {
+    FUNCTION_CALL_TRACE;
+
     if (mMethod.compare("password", Qt::CaseInsensitive) == 0) {
         QStringList propertyList = sessionData.propertyNames();
         Q_FOREACH (const QString &propertyName, propertyList) {
@@ -156,6 +160,8 @@ const QString AuthHandler::password()
 
 void AuthHandler::authenticate()
 {
+    FUNCTION_CALL_TRACE;
+
     QVariant val = QVariant::String;
     mAccount->value(AUTH + SLASH + AUTH_METHOD, val);
     QString method = val.toString();
@@ -179,7 +185,6 @@ void AuthHandler::authenticate()
         QVariant val1 = QVariant::StringList;
         mAccount->value(AUTH + SLASH + method + SLASH + mMechanism + SLASH + SCOPE, val1);
         scope.append(val1.toStringList());
-        qDebug() << scope << "\n";
 
         QByteArray providerName = mAccount->providerName().toLatin1();
         QString clientId = storedKeyValue(providerName.constData(), "caldav", "client_id");
@@ -203,15 +208,16 @@ void AuthHandler::authenticate()
 
 void AuthHandler::credentialsStored(const quint32 id)
 {
+    FUNCTION_CALL_TRACE;
+
     mAccount->setCredentialsId(id);
     mAccount->sync();
 }
 
 void AuthHandler::error(const SignOn::Error & error)
 {
-    printf(error.message().toStdString().c_str());
-    qDebug() << error.message();
-
+    FUNCTION_CALL_TRACE;
+    LOG_DEBUG("Auth error:" << error.message());
     emit failed();
 }
 

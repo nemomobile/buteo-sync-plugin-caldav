@@ -37,6 +37,8 @@ Delete::Delete(QNetworkAccessManager *manager, Settings *settings, QObject *pare
 
 void Delete::deleteEvent(const QString &uri)
 {
+    FUNCTION_CALL_TRACE;
+
     QNetworkRequest request;
     QUrl url(mSettings->url() + uri);
     if (!mSettings->authToken().isEmpty()) {
@@ -49,7 +51,7 @@ void Delete::deleteEvent(const QString &uri)
 
     request.setUrl(url);
     mNReply = mNAManager->sendCustomRequest(request, REQUEST_TYPE.toLatin1());
-    debugRequest(request, "");
+    debugRequest(request, QStringLiteral(""));
     connect(mNReply, SIGNAL(finished()), this, SLOT(requestFinished()));
     connect(mNReply, SIGNAL(error(QNetworkReply::NetworkError)),
             this, SLOT(slotError(QNetworkReply::NetworkError)));
@@ -59,35 +61,11 @@ void Delete::deleteEvent(const QString &uri)
 
 void Delete::requestFinished()
 {
-    LOG_DEBUG("DELETE Request Finished............" << mNReply->readAll());
+    FUNCTION_CALL_TRACE;
+    debugReplyAndReadAll(mNReply);
+
     QVariant statusCode = mNReply->attribute(QNetworkRequest::HttpStatusCodeAttribute);
     if (statusCode.isValid()) {
-        int status = statusCode.toInt();
-        qDebug() << "Status Code : " << status << "\n";
         emit finished();
-    }
-    const QList<QByteArray>& rawHeaderList(mNReply->rawHeaderList());
-    Q_FOREACH (const QByteArray &rawHeader, rawHeaderList) {
-        qDebug() << rawHeader << " : " << mNReply->rawHeader(rawHeader);
-    }
-    qDebug() << "---------------------------------------------------------------------\n";
-}
-
-void Delete::slotError(QNetworkReply::NetworkError error)
-{
-    if (error <= 200) {
-        emit syncError(Sync::SYNC_CONNECTION_ERROR);
-    } else if (error > 200 && error < 400) {
-        emit syncError(Sync::SYNC_SERVER_FAILURE);
-    } else {
-        emit syncError(Sync::SYNC_ERROR);
-    }
-}
-
-void Delete::slotSslErrors(QList<QSslError> errors)
-{
-    qDebug() << "SSL Error";
-    if (mSettings->ignoreSSLErrors()) {
-        mNReply->ignoreSslErrors(errors);
     }
 }

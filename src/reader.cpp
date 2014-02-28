@@ -84,7 +84,6 @@ void Reader::readResponse()
 void Reader::readHref(CDItem* item)
 {
     item->setHref(mReader->readElementText());
-    qDebug() << item->href();
 }
 
 void Reader::readPropStat(CDItem* item)
@@ -101,7 +100,6 @@ void Reader::readPropStat(CDItem* item)
 void Reader::readStatus(CDItem* item)
 {
     item->setStatus(mReader->readElementText());
-    qDebug() << item->status();
 }
 
 void Reader::readProp(CDItem* item)
@@ -118,7 +116,6 @@ void Reader::readProp(CDItem* item)
 void Reader::readGetETag(CDItem* item)
 {
     item->setETag(mReader->readElementText());
-    qDebug() << item->etag();
 }
 
 void Reader::readCalendarData(CDItem* item)

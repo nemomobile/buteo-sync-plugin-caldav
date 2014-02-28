@@ -12,10 +12,8 @@ public:
 
     void getEvent(const QString &u);
 
-public Q_SLOTS:
+private Q_SLOTS:
     void requestFinished();
-    void slotError(QNetworkReply::NetworkError error);
-    void slotSslErrors(QList<QSslError> errors);
 };
 
 #endif // GET_H

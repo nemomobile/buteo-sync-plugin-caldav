@@ -42,10 +42,8 @@ public:
 
     void deleteEvent(const QString &uri);
 
-public Q_SLOTS:
+private Q_SLOTS:
     void requestFinished();
-    void slotError(QNetworkReply::NetworkError error);
-    void slotSslErrors(QList<QSslError> errors);
 };
 
 #endif // DELETE_H
