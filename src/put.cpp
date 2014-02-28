@@ -131,16 +131,5 @@ void Put::requestFinished()
     FUNCTION_CALL_TRACE;
     debugReplyAndReadAll(mNReply);
 
-    QVariant statusCode = mNReply->attribute( QNetworkRequest::HttpStatusCodeAttribute );
-    if (statusCode.isValid() ) {
-        int status = statusCode.toInt();
-        if (status == 201 || status == 204) {
-            //Update ETag for corresponding UID
-            Get *get = new Get(mNAManager, mSettings);
-            get->getEvent(QString(mNReply->url().toString()));
-            connect(get, SIGNAL(finished()), this, SIGNAL(finished()));
-            connect(get, SIGNAL(syncError(Sync::SyncStatus)), this, SIGNAL(syncError(Sync::SyncStatus)));
-            connect(get, SIGNAL(finished()), this, SLOT(deleteLater()));
-        }
-    }
+    emit finished();
 }

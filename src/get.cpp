@@ -44,15 +44,8 @@ void Get::requestFinished()
     QByteArray data = mNReply->readAll();
     debugReply(*mNReply, data);
 
-    Reader reader;
-    reader.read(data);
-    QHash<QString, CDItem *> map = reader.getIncidenceMap();
-    if (!map.isEmpty()) {
-        QHash<QString, CDItem *>::iterator iter = map.begin();
-        CDItem *item = iter.value();
-        qDebug() << "----------------------------" << item->etag() << "\n";
-        emit finished();
-    }
+    // TODO this needs to save the received vcal data into the calendar database.
+    LOG_CRITICAL("Get::requestFinished() is not implemented!");
 
-    emit syncError(Sync::SYNC_ERROR);
+    emit finished();
 }
