@@ -43,6 +43,8 @@
 #include <ProfileEngineDefs.h>
 #include <ProfileManager.h>
 
+#define KEY_ACCOUNT_SERVICE_NAME "account_service_name"
+
 extern "C" CalDavClient* createPlugin(const QString& aPluginName,
                                          const Buteo::SyncProfile& aProfile,
                                          Buteo::PluginCbInterface *aCbInterface)
@@ -226,31 +228,36 @@ bool CalDavClient::initConfig()
     LOG_DEBUG("Initiating config...");
 
     mAccountId = 0;
-    QString remoteDatabasePath = "";
-    QStringList accountList = iProfile.keyValues(Buteo::KEY_ACCOUNT_ID);
-    QStringList remotePaths = iProfile.keyValues(Buteo::KEY_REMOTE_DATABASE);
-    QStringList unameList   = iProfile.keyValues(Buteo::KEY_USERNAME);
-    QStringList paswdList   = iProfile.keyValues(Buteo::KEY_PASSWORD);
-    if (!accountList.isEmpty()) {
-        QString aId = accountList.first();
-        if (aId != NULL) {
-            mAccountId = aId.toInt();
-        }
-    } else {
+
+    QString accountIdString = iProfile.key(Buteo::KEY_ACCOUNT_ID);
+    QString serviceName = iProfile.key(KEY_ACCOUNT_SERVICE_NAME);
+    QString remoteDatabasePath = iProfile.key(Buteo::KEY_REMOTE_DATABASE);
+
+    bool accountIdOk = false;
+    int accountId = accountIdString.toInt(&accountIdOk);
+    if (!accountIdOk) {
+        LOG_WARNING("account id not found in profile");
+        return false;
+    }
+    if (serviceName.isEmpty()) {
+        LOG_WARNING("service name not found in profile");
+        return false;
+    }
+    if (remoteDatabasePath.isEmpty()) {
+        LOG_WARNING("remote database path not found in profile");
         return false;
     }
 
-    if (!remotePaths.isEmpty()) {
-        remoteDatabasePath = remotePaths.first();
-    }
     // caldav plugin relies on the path ending with a separator
     if (!remoteDatabasePath.endsWith('/')) {
         remoteDatabasePath += '/';
     }
+
     if (!mManager) {
         mManager = new Accounts::Manager(this);
     }
-    mAuth = new AuthHandler(mManager, mAccountId, remoteDatabasePath);
+
+    mAuth = new AuthHandler(mManager, accountId, serviceName, remoteDatabasePath);
     if (!mAuth->init()) {
         return false;
     }
@@ -259,15 +266,12 @@ bool CalDavClient::initConfig()
 
     mSettings.setIgnoreSSLErrors(true);
     mSettings.setUrl(remoteDatabasePath);
-    if (!unameList.isEmpty())
-        mSettings.setUsername(unameList.first());
-    if (!paswdList.isEmpty())
-        mSettings.setPassword(paswdList.first());
-    mSettings.setAccountId(mAccountId);
+    mSettings.setAccountId(accountId);
 
     mSyncDirection = iProfile.syncDirection();
     mConflictResPolicy = iProfile.conflictResolutionPolicy();
 
+    mAccountId = accountId;
     return true;
 }
 

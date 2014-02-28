@@ -31,6 +31,9 @@
 #include <QUrl>
 
 #include <Accounts/Manager>
+#include <Accounts/AuthData>
+#include <Accounts/AccountService>
+#include <SignOn/SessionData>
 
 #include <oauth2data.h>
 
@@ -53,10 +56,12 @@ const QString AUTH                  ("auth");
 const QString AUTH_METHOD           ("method");
 const QString MECHANISM             ("mechanism");
 
-AuthHandler::AuthHandler(Accounts::Manager *manager, const quint32 accountId, const QString &remoteDatabasePath, QObject *parent)
+AuthHandler::AuthHandler(Accounts::Manager *manager, const quint32 accountId, const QString &accountService, const QString &remoteDatabasePath, QObject *parent)
     : QObject(parent)
+    , mAccountManager(manager)
     , mAccount (manager->account(accountId))
     , mRemoteDatabasePath(remoteDatabasePath)
+    , m_accountService(accountService)
 {
 }
 
@@ -70,12 +75,20 @@ bool AuthHandler::init()
     }
 
     QVariant val = QVariant::String;
+
+    Accounts::Service srv = mAccountManager->service(m_accountService);
+    if (!srv.isValid()) {
+        LOG_WARNING("Cannot select service:" << m_accountService);
+        return false;
+    }
+    mAccount->selectService(srv);
     mAccount->value(AUTH + SLASH + AUTH_METHOD, val);
     mMethod = val.toString();
     mAccount->value(AUTH + SLASH + MECHANISM, val);
     mMechanism = val.toString();
-
     qint32 cId = mAccount->credentialsId();
+    mAccount->selectService(Accounts::Service());
+
     if (cId == 0) {
         QMap<MethodName,MechanismsList> methods;
         methods.insert(mMethod, QStringList()  << mMechanism);
@@ -162,14 +175,27 @@ void AuthHandler::authenticate()
 {
     FUNCTION_CALL_TRACE;
 
+    QByteArray providerName = mAccount->providerName().toLatin1();
+
+    Accounts::Service srv = mAccountManager->service(m_accountService);
+    mAccount->selectService(srv);
+
     QVariant val = QVariant::String;
     mAccount->value(AUTH + SLASH + AUTH_METHOD, val);
     QString method = val.toString();
+    mAccount->selectService(Accounts::Service());
 
     if (mMethod.compare("password", Qt::CaseInsensitive) == 0) {
-        SignOn::SessionData data;
+        Accounts::AccountService as(mAccount, srv);
+        Accounts::AuthData authData(as.authData());
+        QVariantMap parameters = authData.parameters();
+        parameters.insert("UiPolicy", SignOn::NoUserInteractionPolicy);
+
+        SignOn::SessionData data(parameters);
         mSession->process(data, mMechanism);
     } else if (mMethod.compare("oauth2", Qt::CaseInsensitive) == 0) {
+        mAccount->selectService(srv);
+
         mAccount->value(AUTH + SLASH + method + SLASH + mMechanism + SLASH + HOST, val);
         QString host = val.toString();
         mAccount->value(AUTH + SLASH + method + SLASH + mMechanism + SLASH + AUTH_PATH, val);
@@ -186,7 +212,6 @@ void AuthHandler::authenticate()
         mAccount->value(AUTH + SLASH + method + SLASH + mMechanism + SLASH + SCOPE, val1);
         scope.append(val1.toStringList());
 
-        QByteArray providerName = mAccount->providerName().toLatin1();
         QString clientId = storedKeyValue(providerName.constData(), "caldav", "client_id");
         QString clientSecret = storedKeyValue(providerName.constData(), "caldav", "client_secret");
         OAuth2PluginNS::OAuth2PluginData data;
@@ -199,6 +224,8 @@ void AuthHandler::authenticate()
         data.setResponseType(QStringList() << response_type);
         data.setScope(scope);
 
+        mAccount->selectService(Accounts::Service());
+
         mSession->process(data, mMechanism);
     } else {
         LOG_FATAL("Unsupported Method requested....................");
@@ -210,8 +237,10 @@ void AuthHandler::credentialsStored(const quint32 id)
 {
     FUNCTION_CALL_TRACE;
 
+    mAccount->selectService(mAccountManager->service(m_accountService));
     mAccount->setCredentialsId(id);
     mAccount->sync();
+    mAccount->selectService(Accounts::Service());
 }
 
 void AuthHandler::error(const SignOn::Error & error)
@@ -223,6 +252,8 @@ void AuthHandler::error(const SignOn::Error & error)
 
 QString AuthHandler::storedKeyValue(const char *provider, const char *service, const char *keyName)
 {
+    FUNCTION_CALL_TRACE;
+
     char *storedKey = NULL;
     QString retn;
 
