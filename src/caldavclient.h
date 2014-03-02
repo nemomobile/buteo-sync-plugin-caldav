@@ -55,9 +55,6 @@ public:
     virtual Buteo::SyncResults getSyncResults() const;
     virtual bool cleanUp();
 
-Q_SIGNALS:
-    void stateChanged(Sync::SyncProgressDetail progress);
-
 public Q_SLOTS:
     virtual void connectivityStateChanged(Sync::ConnectivityType aType, bool aState);
 
@@ -65,7 +62,6 @@ private Q_SLOTS:
     bool start();
     void authenticationError();
     void syncFinished(Sync::SyncStatus syncStatus);
-    void receiveStateChanged(Sync::SyncProgressDetail aState);
     void requestFinished();
 
 private:

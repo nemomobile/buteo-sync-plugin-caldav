@@ -105,9 +105,6 @@ bool CalDavClient::startSync()
     if (!mAuth)
         return false;
 
-    connect(this, SIGNAL(stateChanged(Sync::SyncProgressDetail)),
-            this, SLOT(receiveStateChanged(Sync::SyncProgressDetail)));
-
     mAuth->authenticate();
 
     LOG_DEBUG ("Init done. Continuing with sync");
@@ -270,29 +267,6 @@ bool CalDavClient::initConfig()
     mConflictResPolicy = iProfile.conflictResolutionPolicy();
 
     return true;
-}
-
-void CalDavClient::receiveStateChanged(Sync::SyncProgressDetail aState)
-{
-    FUNCTION_CALL_TRACE;
-
-    switch(aState) {
-    case Sync::SYNC_PROGRESS_SENDING_ITEMS: {
-        emit syncProgressDetail(getProfileName(), Sync::SYNC_PROGRESS_SENDING_ITEMS);
-        break;
-    }
-    case Sync::SYNC_PROGRESS_RECEIVING_ITEMS: {
-        emit syncProgressDetail(getProfileName(), Sync::SYNC_PROGRESS_RECEIVING_ITEMS);
-        break;
-    }
-    case Sync::SYNC_PROGRESS_FINALISING: {
-        emit syncProgressDetail(getProfileName(),Sync::SYNC_PROGRESS_FINALISING);
-        break;
-    }
-    default:
-        //do nothing
-        break;
-    };
 }
 
 void CalDavClient::syncFinished(Sync::SyncStatus syncStatus)
