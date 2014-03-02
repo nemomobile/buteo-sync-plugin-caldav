@@ -55,6 +55,8 @@ extern "C" void destroyPlugin(CalDavClient *aClient)
     delete aClient;
 }
 
+static const QString VCalExtension = QStringLiteral(".ics");
+
 CalDavClient::CalDavClient(const QString& aPluginName,
                             const Buteo::SyncProfile& aProfile,
                             Buteo::PluginCbInterface *aCbInterface)
@@ -442,10 +444,13 @@ void CalDavClient::startQuickSync()
         QString path;
         if (uri.isEmpty()) {
             path = incidence->uid();
+            if (!path.isEmpty()) {
+                path += VCalExtension;
+            }
         } else {
             path = uri.split("/", QString::SkipEmptyParts).last();
         }
-        del->deleteEvent(uri);
+        del->deleteEvent(path);
         connect(del, SIGNAL(finished()), del, SLOT(deleteLater()));
         connect(del, SIGNAL(syncError(Sync::SyncStatus)), this, SLOT(syncFinished(Sync::SyncStatus)));
     }
