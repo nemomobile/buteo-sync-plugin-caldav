@@ -67,7 +67,7 @@ void Report::getAllEvents()
     request.setRawHeader("Prefer", "return-minimal");
     request.setHeader(QNetworkRequest::ContentTypeHeader, "application/xml; charset=utf-8");
 
-    QBuffer *buffer = new QBuffer;
+    QBuffer *buffer = new QBuffer(this);
     buffer->setData("<c:calendar-query xmlns:d=\"DAV:\" xmlns:c=\"urn:ietf:params:xml:ns:caldav\">" \
                     "<d:prop> <d:getetag /> <c:calendar-data /> </d:prop>"       \
                     "<c:filter> <c:comp-filter name=\"VCALENDAR\" /> </c:filter>" \
@@ -99,7 +99,7 @@ void Report::getAllETags()
     request.setRawHeader("Prefer", "return-minimal");
     request.setHeader(QNetworkRequest::ContentTypeHeader, "application/xml; charset=utf-8");
 
-    QBuffer *buffer = new QBuffer;
+    QBuffer *buffer = new QBuffer(this);
     buffer->setData("<c:calendar-query xmlns:d=\"DAV:\" xmlns:c=\"urn:ietf:params:xml:ns:caldav\">" \
                     "<d:prop> <d:getetag /> </d:prop> " \
                     "<c:filter> <c:comp-filter name=\"VCALENDAR\" > " \
@@ -149,7 +149,7 @@ void Report::multiGetEvents(const QStringList &eventIdList, bool includeCalendar
     }
     multiGetRequest.append("</c:calendar-multiget>");
 
-    QBuffer *buffer = new QBuffer;
+    QBuffer *buffer = new QBuffer(this);
     buffer->setData(multiGetRequest.toLatin1());
     mNReply = mNAManager->sendCustomRequest(request, REQUEST_TYPE.toLatin1(), buffer);
 

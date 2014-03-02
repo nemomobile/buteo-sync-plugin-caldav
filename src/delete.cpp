@@ -25,7 +25,6 @@
 #include "settings.h"
 
 #include <QNetworkAccessManager>
-#include <QBuffer>
 #include <QDebug>
 
 Delete::Delete(QNetworkAccessManager *manager, Settings *settings, QObject *parent)

@@ -3,7 +3,6 @@
 #include "reader.h"
 
 #include <QNetworkAccessManager>
-#include <QBuffer>
 #include <QDebug>
 #include <QHash>
 #include <QStringList>

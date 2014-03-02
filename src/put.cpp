@@ -77,7 +77,7 @@ void Put::updateEvent(KCalCore::Incidence::Ptr incidence)
     request.setRawHeader("If-Match", etag.toLatin1());
     request.setHeader(QNetworkRequest::ContentTypeHeader, "text/calendar; charset=utf-8");
 
-    QBuffer *buffer = new QBuffer;
+    QBuffer *buffer = new QBuffer(this);
     buffer->setData(data.toLatin1());
     mNReply = mNAManager->sendCustomRequest(request, REQUEST_TYPE.toLatin1(), buffer);
     debugRequest(request, data);
@@ -115,7 +115,7 @@ void Put::createEvent(KCalCore::Incidence::Ptr incidence)
     }
     request.setUrl(url);
 
-    QBuffer *buffer = new QBuffer;
+    QBuffer *buffer = new QBuffer(this);
     buffer->setData(ical.toLatin1());
     mNReply = mNAManager->sendCustomRequest(request, REQUEST_TYPE.toLatin1(), buffer);
     debugRequest(request, ical);
