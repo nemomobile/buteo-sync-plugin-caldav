@@ -38,7 +38,11 @@ Request::Request(QNetworkAccessManager *manager,
 void Request::slotError(QNetworkReply::NetworkError error)
 {
     FUNCTION_CALL_TRACE;
-    debugReplyAndReadAll(mNReply);
+    QNetworkReply *reply = qobject_cast<QNetworkReply*>(sender());
+    if (!reply) {
+        return;
+    }
+    debugReplyAndReadAll(reply);
 
     if (error <= 200) {
         emit syncError(Sync::SYNC_CONNECTION_ERROR);
@@ -52,10 +56,14 @@ void Request::slotError(QNetworkReply::NetworkError error)
 void Request::slotSslErrors(QList<QSslError> errors)
 {
     FUNCTION_CALL_TRACE;
-    debugReplyAndReadAll(mNReply);
+    QNetworkReply *reply = qobject_cast<QNetworkReply*>(sender());
+    if (!reply) {
+        return;
+    }
+    debugReplyAndReadAll(reply);
 
     if (mSettings->ignoreSSLErrors()) {
-        mNReply->ignoreSslErrors(errors);
+        reply->ignoreSslErrors(errors);
     }
 }
 

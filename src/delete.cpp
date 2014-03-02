@@ -33,7 +33,6 @@ Delete::Delete(QNetworkAccessManager *manager, Settings *settings, QObject *pare
     FUNCTION_CALL_TRACE;
 }
 
-
 void Delete::deleteEvent(const QString &uri)
 {
     FUNCTION_CALL_TRACE;
@@ -49,21 +48,29 @@ void Delete::deleteEvent(const QString &uri)
     }
 
     request.setUrl(url);
-    mNReply = mNAManager->sendCustomRequest(request, REQUEST_TYPE.toLatin1());
+    QNetworkReply *reply = mNAManager->sendCustomRequest(request, REQUEST_TYPE.toLatin1());
     debugRequest(request, QStringLiteral(""));
-    connect(mNReply, SIGNAL(finished()), this, SLOT(requestFinished()));
-    connect(mNReply, SIGNAL(error(QNetworkReply::NetworkError)),
+    connect(reply, SIGNAL(finished()), this, SLOT(requestFinished()));
+    connect(reply, SIGNAL(error(QNetworkReply::NetworkError)),
             this, SLOT(slotError(QNetworkReply::NetworkError)));
-    connect(mNReply, SIGNAL(sslErrors(QList<QSslError>)),
+    connect(reply, SIGNAL(sslErrors(QList<QSslError>)),
             this, SLOT(slotSslErrors(QList<QSslError>)));
 }
 
 void Delete::requestFinished()
 {
     FUNCTION_CALL_TRACE;
-    debugReplyAndReadAll(mNReply);
 
-    QVariant statusCode = mNReply->attribute(QNetworkRequest::HttpStatusCodeAttribute);
+    QNetworkReply *reply = qobject_cast<QNetworkReply*>(sender());
+    if (!reply) {
+        emit syncError(Sync::SYNC_ERROR);
+        return;
+    }
+    debugReplyAndReadAll(reply);
+
+    QVariant statusCode = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute);
+    reply->deleteLater();
+
     if (statusCode.isValid()) {
         emit finished();
     }

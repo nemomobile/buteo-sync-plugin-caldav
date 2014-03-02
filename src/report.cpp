@@ -72,13 +72,12 @@ void Report::getAllEvents()
                     "<d:prop> <d:getetag /> <c:calendar-data /> </d:prop>"       \
                     "<c:filter> <c:comp-filter name=\"VCALENDAR\" /> </c:filter>" \
                     "</c:calendar-query>");
-    mNReply = mNAManager->sendCustomRequest(request, REQUEST_TYPE.toLatin1(), buffer);
+    QNetworkReply *reply = mNAManager->sendCustomRequest(request, REQUEST_TYPE.toLatin1(), buffer);
     debugRequest(request, buffer->buffer());
-
-    connect(mNReply, SIGNAL(finished()), this, SLOT(processEvents()));
-    connect(mNReply, SIGNAL(error(QNetworkReply::NetworkError)),
+    connect(reply, SIGNAL(finished()), this, SLOT(processEvents()));
+    connect(reply, SIGNAL(error(QNetworkReply::NetworkError)),
             this, SLOT(slotError(QNetworkReply::NetworkError)));
-    connect(mNReply, SIGNAL(sslErrors(QList<QSslError>)),
+    connect(reply, SIGNAL(sslErrors(QList<QSslError>)),
             this, SLOT(slotSslErrors(QList<QSslError>)));
 }
 
@@ -105,13 +104,13 @@ void Report::getAllETags()
                     "<c:filter> <c:comp-filter name=\"VCALENDAR\" > " \
                     "</c:comp-filter> </c:filter>" \
                     "</c:calendar-query> ");
-    mNReply = mNAManager->sendCustomRequest(request, REQUEST_TYPE.toLatin1(), buffer);
+    QNetworkReply *reply = mNAManager->sendCustomRequest(request, REQUEST_TYPE.toLatin1(), buffer);
     debugRequest(request, buffer->buffer());
 
-    connect(mNReply, SIGNAL(finished()), this, SLOT(processETags()));
-    connect(mNReply, SIGNAL(error(QNetworkReply::NetworkError)),
+    connect(reply, SIGNAL(finished()), this, SLOT(processETags()));
+    connect(reply, SIGNAL(error(QNetworkReply::NetworkError)),
             this, SLOT(slotError(QNetworkReply::NetworkError)));
-    connect(mNReply, SIGNAL(sslErrors(QList<QSslError>)),
+    connect(reply, SIGNAL(sslErrors(QList<QSslError>)),
             this, SLOT(slotSslErrors(QList<QSslError>)));
 }
 
@@ -151,16 +150,16 @@ void Report::multiGetEvents(const QStringList &eventIdList, bool includeCalendar
 
     QBuffer *buffer = new QBuffer(this);
     buffer->setData(multiGetRequest.toLatin1());
-    mNReply = mNAManager->sendCustomRequest(request, REQUEST_TYPE.toLatin1(), buffer);
+    QNetworkReply *reply = mNAManager->sendCustomRequest(request, REQUEST_TYPE.toLatin1(), buffer);
 
     if (includeCalendarData) {
-        connect(mNReply, SIGNAL(finished()), this, SLOT(processEvents()));
+        connect(reply, SIGNAL(finished()), this, SLOT(processEvents()));
     } else {
-        connect(mNReply, SIGNAL(finished()), this, SLOT(updateETags()));
+        connect(reply, SIGNAL(finished()), this, SLOT(updateETags()));
     }
-    connect(mNReply, SIGNAL(error(QNetworkReply::NetworkError)),
+    connect(reply, SIGNAL(error(QNetworkReply::NetworkError)),
             this, SLOT(slotError(QNetworkReply::NetworkError)));
-    connect(mNReply, SIGNAL(sslErrors(QList<QSslError>)),
+    connect(reply, SIGNAL(sslErrors(QList<QSslError>)),
             this, SLOT(slotSslErrors(QList<QSslError>)));
 }
 
@@ -168,7 +167,14 @@ void Report::processEvents()
 {
     FUNCTION_CALL_TRACE;
 
-    QByteArray data = mNReply->readAll();
+    QNetworkReply *reply = qobject_cast<QNetworkReply*>(sender());
+    if (!reply) {
+        emit syncError(Sync::SYNC_ERROR);
+        return;
+    }
+    QByteArray data = reply->readAll();
+    reply->deleteLater();
+
     if (!data.isNull() && !data.isEmpty()) {
         Reader reader;
         reader.read(data);
@@ -191,7 +197,6 @@ void Report::processEvents()
         if (nbUid.isNull() || nbUid.isEmpty()) {
             LOG_WARNING("Not able to find NoteBook's UID...... Won't Save Events ");
             emit syncError(Sync::SYNC_ERROR);
-            mNReply->deleteLater();
             return;
         }
         storage->loadNotebookIncidences(nbUid);
@@ -279,7 +284,6 @@ void Report::processEvents()
         storage->save();
         storage->close();
     }
-    mNReply->deleteLater();
     emit finished();
 }
 
@@ -287,15 +291,23 @@ void Report::processETags()
 {
     FUNCTION_CALL_TRACE;
 
-    QVariant statusCode = mNReply->attribute(QNetworkRequest::HttpStatusCodeAttribute);
+    QNetworkReply *reply = qobject_cast<QNetworkReply*>(sender());
+    if (!reply) {
+        emit syncError(Sync::SYNC_ERROR);
+        return;
+    }
+    QVariant statusCode = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute);
     if (statusCode.isValid()) {
         int status = statusCode.toInt();
         if (status > 299) {
+            reply->deleteLater();
             return;
         }
     }
 
-    QByteArray data = mNReply->readAll();
+    QByteArray data = reply->readAll();
+    reply->deleteLater();
+
     if (!data.isNull() && !data.isEmpty()) {
         LOG_DEBUG(data);
         Reader reader;
@@ -318,7 +330,6 @@ void Report::processETags()
         if (nbUid.isNull() || nbUid.isEmpty()) {
             LOG_WARNING("Not able to find NoteBook's UID...... Won't Save Events ");
             emit syncError(Sync::SYNC_ERROR);
-            mNReply->deleteLater();
             return;
         }
         storage->loadNotebookIncidences(nbUid);
@@ -364,7 +375,6 @@ void Report::processETags()
         }
 
         eventIdList.append(map.keys());
-        mNReply->deleteLater();
         if (!eventIdList.isEmpty()) {
             multiGetEvents(eventIdList, true);
         } else {
@@ -381,8 +391,14 @@ void Report::updateETags()
 {
     FUNCTION_CALL_TRACE;
 
-    QByteArray data = mNReply->readAll();
-    debugReply(*mNReply, data);
+    QNetworkReply *reply = qobject_cast<QNetworkReply*>(sender());
+    if (!reply) {
+        emit syncError(Sync::SYNC_ERROR);
+        return;
+    }
+    QByteArray data = reply->readAll();
+    debugReply(*reply, data);
+    reply->deleteLater();
 
     if (!data.isNull() && !data.isEmpty()) {
         Reader reader;

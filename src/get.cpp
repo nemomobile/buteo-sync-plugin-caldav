@@ -28,20 +28,25 @@ void Get::getEvent(const QString &u)
         url.setPassword(mSettings->password());
     }
     request.setUrl(url);
-    mNReply = mNAManager->get(request);
+    QNetworkReply *reply = mNAManager->get(request);
     debugRequest(request, QStringLiteral(""));
-    connect(mNReply, SIGNAL(finished()), this, SLOT(requestFinished()));
-    connect(mNReply, SIGNAL(error(QNetworkReply::NetworkError)),
+    connect(reply, SIGNAL(finished()), this, SLOT(requestFinished()));
+    connect(reply, SIGNAL(error(QNetworkReply::NetworkError)),
             this, SLOT(slotError(QNetworkReply::NetworkError)));
-    connect(mNReply, SIGNAL(sslErrors(QList<QSslError>)),
+    connect(reply, SIGNAL(sslErrors(QList<QSslError>)),
             this, SLOT(slotSslErrors(QList<QSslError>)));
 }
 
 void Get::requestFinished()
 {
     FUNCTION_CALL_TRACE;
-    QByteArray data = mNReply->readAll();
-    debugReply(*mNReply, data);
+    QNetworkReply *reply = qobject_cast<QNetworkReply*>(sender());
+    if (!reply) {
+        emit syncError(Sync::SYNC_ERROR);
+        return;
+    }
+    debugReplyAndReadAll(reply);
+    reply->deleteLater();
 
     // TODO this needs to save the received vcal data into the calendar database.
     LOG_CRITICAL("Get::requestFinished() is not implemented!");

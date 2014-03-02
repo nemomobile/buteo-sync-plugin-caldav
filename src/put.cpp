@@ -79,12 +79,12 @@ void Put::updateEvent(KCalCore::Incidence::Ptr incidence)
 
     QBuffer *buffer = new QBuffer(this);
     buffer->setData(data.toLatin1());
-    mNReply = mNAManager->sendCustomRequest(request, REQUEST_TYPE.toLatin1(), buffer);
+    QNetworkReply *reply = mNAManager->sendCustomRequest(request, REQUEST_TYPE.toLatin1(), buffer);
     debugRequest(request, data);
-    connect(mNReply, SIGNAL(finished()), this, SLOT(requestFinished()));
-    connect(mNReply, SIGNAL(error(QNetworkReply::NetworkError)),
+    connect(reply, SIGNAL(finished()), this, SLOT(requestFinished()));
+    connect(reply, SIGNAL(error(QNetworkReply::NetworkError)),
             this, SLOT(slotError(QNetworkReply::NetworkError)));
-    connect(mNReply, SIGNAL(sslErrors(QList<QSslError>)),
+    connect(reply, SIGNAL(sslErrors(QList<QSslError>)),
             this, SLOT(slotSslErrors(QList<QSslError>)));
 }
 
@@ -117,19 +117,25 @@ void Put::createEvent(KCalCore::Incidence::Ptr incidence)
 
     QBuffer *buffer = new QBuffer(this);
     buffer->setData(ical.toLatin1());
-    mNReply = mNAManager->sendCustomRequest(request, REQUEST_TYPE.toLatin1(), buffer);
+    QNetworkReply *reply = mNAManager->sendCustomRequest(request, REQUEST_TYPE.toLatin1(), buffer);
     debugRequest(request, ical);
-    connect(mNReply, SIGNAL(finished()), this, SLOT(requestFinished()));
-    connect(mNReply, SIGNAL(error(QNetworkReply::NetworkError)),
+    connect(reply, SIGNAL(finished()), this, SLOT(requestFinished()));
+    connect(reply, SIGNAL(error(QNetworkReply::NetworkError)),
             this, SLOT(slotError(QNetworkReply::NetworkError)));
-    connect(mNReply, SIGNAL(sslErrors(QList<QSslError>)),
+    connect(reply, SIGNAL(sslErrors(QList<QSslError>)),
             this, SLOT(slotSslErrors(QList<QSslError>)));
 }
 
 void Put::requestFinished()
 {
     FUNCTION_CALL_TRACE;
-    debugReplyAndReadAll(mNReply);
+    QNetworkReply *reply = qobject_cast<QNetworkReply*>(sender());
+    if (!reply) {
+        emit syncError(Sync::SYNC_ERROR);
+        return;
+    }
+    debugReplyAndReadAll(reply);
+    reply->deleteLater();
 
     emit finished();
 }

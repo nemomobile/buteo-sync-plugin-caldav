@@ -58,7 +58,6 @@ protected:
     void debugReplyAndReadAll(QNetworkReply *reply);
 
     QNetworkAccessManager *mNAManager;
-    QNetworkReply *mNReply;
     const QString REQUEST_TYPE;
     Settings* mSettings;
 };
