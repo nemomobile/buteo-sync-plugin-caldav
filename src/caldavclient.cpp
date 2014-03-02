@@ -107,8 +107,6 @@ bool CalDavClient::startSync()
 
     connect(this, SIGNAL(stateChanged(Sync::SyncProgressDetail)),
             this, SLOT(receiveStateChanged(Sync::SyncProgressDetail)));
-    connect(this, SIGNAL(syncFinished(Sync::SyncStatus)),
-            this, SLOT(receiveSyncFinished(Sync::SyncStatus)));
 
     mAuth->authenticate();
 
@@ -172,7 +170,7 @@ bool CalDavClient::start()
 bool CalDavClient::abort(Sync::SyncStatus status)
 {
     Q_UNUSED(status)
-    emit syncFinished(Sync::SYNC_ABORTED);
+    syncFinished(Sync::SYNC_ABORTED);
     return true;
 }
 
@@ -209,8 +207,8 @@ bool CalDavClient::cleanUp()
     calendar->close();
 
     if (nbUid.isNull() || nbUid.isEmpty()) {
-        LOG_WARNING("Not able to find NoteBook's UID...... Wont Save Events ");
-        emit syncFinished(Sync::SYNC_ERROR);
+        LOG_WARNING("Not able to find NoteBook's UID...... Won't Save Events ");
+        syncFinished(Sync::SYNC_ERROR);
         return false;
     }
 
@@ -293,36 +291,70 @@ void CalDavClient::receiveStateChanged(Sync::SyncProgressDetail aState)
     };
 }
 
-void CalDavClient::receiveSyncFinished(Sync::SyncStatus aState) {
+void CalDavClient::syncFinished(Sync::SyncStatus syncStatus)
+{
     FUNCTION_CALL_TRACE;
 
-    switch(aState) {
-        case Sync::SYNC_ERROR:
-        case Sync::SYNC_AUTHENTICATION_FAILURE:
-        case Sync::SYNC_DATABASE_FAILURE:
-        case Sync::SYNC_CONNECTION_ERROR:
-        case Sync::SYNC_NOTPOSSIBLE: {
-            emit error(getProfileName(), "", aState);
-            break;
-        }
-        case Sync::SYNC_ABORTED:
-        case Sync::SYNC_DONE: {
-            emit success(getProfileName(), QString::number(aState));
-            break;
-        }
-        case Sync::SYNC_QUEUED:
-        case Sync::SYNC_STARTED:
-        case Sync::SYNC_PROGRESS:
-        default: {
-            emit error(getProfileName(), "", aState);
-            break;
-        }
+    int minorErrorCode = -1;
+
+    switch (syncStatus)
+    {
+    case Sync::SYNC_QUEUED:
+    case Sync::SYNC_STARTED:
+    case Sync::SYNC_PROGRESS:
+        // no error, sync has not finished
+        break;
+    case Sync::SYNC_ERROR:
+        minorErrorCode = Buteo::SyncResults::INTERNAL_ERROR;
+        break;
+    case Sync::SYNC_DONE:
+        minorErrorCode = Buteo::SyncResults::NO_ERROR;
+        break;
+    case Sync::SYNC_ABORTED:
+        minorErrorCode = Buteo::SyncResults::ABORTED;
+        break;
+    case Sync::SYNC_CANCELLED:
+        minorErrorCode = Buteo::SyncResults::ABORTED;
+        break;
+    case Sync::SYNC_STOPPING:
+        minorErrorCode = Buteo::SyncResults::ABORTED;
+        break;
+    case Sync::SYNC_NOTPOSSIBLE:
+        minorErrorCode = Buteo::SyncResults::INTERNAL_ERROR;
+        break;
+    case Sync::SYNC_AUTHENTICATION_FAILURE:
+        minorErrorCode = Buteo::SyncResults::AUTHENTICATION_FAILURE;
+        break;
+    case Sync::SYNC_DATABASE_FAILURE:
+        minorErrorCode = Buteo::SyncResults::DATABASE_FAILURE;
+        break;
+    case Sync::SYNC_CONNECTION_ERROR:
+        minorErrorCode = Buteo::SyncResults::CONNECTION_ERROR;
+        break;
+    case Sync::SYNC_SERVER_FAILURE:
+        minorErrorCode = Buteo::SyncResults::INTERNAL_ERROR;
+        break;
+    case Sync::SYNC_BAD_REQUEST:
+        minorErrorCode = Buteo::SyncResults::INTERNAL_ERROR;
+        break;
+    }
+
+    if (minorErrorCode == Buteo::SyncResults::NO_ERROR) {
+        mResults = Buteo::SyncResults(QDateTime::currentDateTime().toUTC(),
+                                      Buteo::SyncResults::SYNC_RESULT_SUCCESS,
+                                      Buteo::SyncResults::NO_ERROR);
+        emit success(getProfileName(), QString::number(syncStatus));
+    } else if (minorErrorCode > 0) {
+        mResults = Buteo::SyncResults(QDateTime::currentDateTime().toUTC(),
+                                      Buteo::SyncResults::SYNC_RESULT_FAILED,
+                                      minorErrorCode);
+        emit error(getProfileName(), "", syncStatus);
     }
 }
 
 void CalDavClient::authenticationError()
 {
-    emit syncFinished(Sync::SYNC_AUTHENTICATION_FAILURE);
+    syncFinished(Sync::SYNC_AUTHENTICATION_FAILURE);
 }
 
 const QDateTime CalDavClient::lastSyncTime()
@@ -385,7 +417,7 @@ void CalDavClient::startSlowSync()
         report->getAllEvents();
         connect(report, SIGNAL(finished()), this, SLOT(requestFinished()));
         connect(report, SIGNAL(finished()), report, SLOT(deleteLater()));
-        connect(report, SIGNAL(syncError(Sync::SyncStatus)), this, SIGNAL(syncFinished(Sync::SyncStatus)));
+        connect(report, SIGNAL(syncError(Sync::SyncStatus)), this, SLOT(syncFinished(Sync::SyncStatus)));
     }
 }
 
@@ -411,7 +443,7 @@ void CalDavClient::startQuickSync()
         Put *put = new Put(mNAManager, &mSettings);
         put->createEvent(incidence);
         connect(put, SIGNAL(finished()), put, SLOT(deleteLater()));
-        connect(put, SIGNAL(syncError(Sync::SyncStatus)), this, SIGNAL(syncFinished(Sync::SyncStatus)));
+        connect(put, SIGNAL(syncError(Sync::SyncStatus)), this, SLOT(syncFinished(Sync::SyncStatus)));
     }
 
     list->clear();
@@ -423,7 +455,7 @@ void CalDavClient::startQuickSync()
         Put *put = new Put(mNAManager, &mSettings);
         put->updateEvent(incidence);
         connect(put, SIGNAL(finished()), put, SLOT(deleteLater()));
-        connect(put, SIGNAL(syncError(Sync::SyncStatus)), this, SIGNAL(syncFinished(Sync::SyncStatus)));
+        connect(put, SIGNAL(syncError(Sync::SyncStatus)), this, SLOT(syncFinished(Sync::SyncStatus)));
     }
 
     list->clear();
@@ -441,10 +473,9 @@ void CalDavClient::startQuickSync()
         } else {
             path = uri.split("/", QString::SkipEmptyParts).last();
         }
-
         del->deleteEvent(uri);
         connect(del, SIGNAL(finished()), del, SLOT(deleteLater()));
-        connect(del, SIGNAL(syncError(Sync::SyncStatus)), this, SIGNAL(syncFinished(Sync::SyncStatus)));
+        connect(del, SIGNAL(syncError(Sync::SyncStatus)), this, SLOT(syncFinished(Sync::SyncStatus)));
     }
     storage->close();
     calendar->close();
@@ -453,10 +484,12 @@ void CalDavClient::startQuickSync()
     report->getAllETags();
     connect(report, SIGNAL(finished()), this, SLOT(requestFinished()));
     connect(report, SIGNAL(finished()), report, SLOT(deleteLater()));
-    connect(report, SIGNAL(syncError(Sync::SyncStatus)), this, SIGNAL(syncFinished(Sync::SyncStatus)));
+    connect(report, SIGNAL(syncError(Sync::SyncStatus)), this, SLOT(syncFinished(Sync::SyncStatus)));
 }
 
 void CalDavClient::requestFinished()
 {
-    emit syncFinished(Sync::SYNC_DONE);
+    FUNCTION_CALL_TRACE;
+    LOG_DEBUG("Request finished at" << lastSyncTime());
+    syncFinished(Sync::SYNC_DONE);
 }

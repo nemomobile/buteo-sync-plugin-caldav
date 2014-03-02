@@ -57,14 +57,15 @@ public:
 
 Q_SIGNALS:
     void stateChanged(Sync::SyncProgressDetail progress);
-    void syncFinished(Sync::SyncStatus);
 
 public Q_SLOTS:
     virtual void connectivityStateChanged(Sync::ConnectivityType aType, bool aState);
+
+private Q_SLOTS:
     bool start();
     void authenticationError();
+    void syncFinished(Sync::SyncStatus syncStatus);
     void receiveStateChanged(Sync::SyncProgressDetail aState);
-    void receiveSyncFinished(Sync::SyncStatus);
     void requestFinished();
 
 private:
