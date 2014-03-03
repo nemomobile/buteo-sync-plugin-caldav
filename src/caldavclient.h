@@ -1,5 +1,5 @@
 /*
- * This file is part of buteo-gcontact-plugin package
+ * This file is part of buteo-sync-plugin-caldav package
  *
  * Copyright (C) 2013 Jolla Ltd. and/or its subsidiary(-ies).
  *

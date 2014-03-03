@@ -1,5 +1,5 @@
 /*
- * This file is part of buteo-gcontact-plugin package
+ * This file is part of buteo-sync-plugin-caldav package
  *
  * Copyright (C) 2013 Jolla Ltd. and/or its subsidiary(-ies).
  *
@@ -319,6 +319,10 @@ void CalDavClient::syncFinished(Sync::SyncStatus syncStatus)
         minorErrorCode = Buteo::SyncResults::INTERNAL_ERROR;
         break;
     case Sync::SYNC_BAD_REQUEST:
+        minorErrorCode = Buteo::SyncResults::INTERNAL_ERROR;
+        break;
+    default:
+        qWarning() << "Unrecognized sync status" << syncStatus << ", defaulting to INTERNAL_ERROR result";
         minorErrorCode = Buteo::SyncResults::INTERNAL_ERROR;
         break;
     }

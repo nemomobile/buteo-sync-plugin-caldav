@@ -1,5 +1,5 @@
 /*
- * This file is part of buteo-gcontact-plugin package
+ * This file is part of buteo-sync-plugin-caldav package
  *
  * Copyright (C) 2013 Jolla Ltd. and/or its subsidiary(-ies).
  *
@@ -64,7 +64,6 @@ private:
     QString storedKeyValue(const char *provider, const char *service, const char *keyName);
 
 private Q_SLOTS:
-    void credentialsStored(const quint32);
     void error(const SignOn::Error &);
     void sessionResponse(const SignOn::SessionData &);
 

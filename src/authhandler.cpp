@@ -1,5 +1,5 @@
 /*
- * This file is part of buteo-gcontact-plugin package
+ * This file is part of buteo-sync-plugin-caldav package
  *
  * Copyright (C) 2013 Jolla Ltd. and/or its subsidiary(-ies).
  *
@@ -90,27 +90,13 @@ bool AuthHandler::init()
     mAccount->selectService(Accounts::Service());
 
     if (cId == 0) {
-        QMap<MethodName,MechanismsList> methods;
-        methods.insert(mMethod, QStringList()  << mMechanism);
-        IdentityInfo *info = new IdentityInfo(mAccount->displayName(), "", methods);
-        QUrl url(mRemoteDatabasePath);
-        info->setRealms(QStringList() << url.host());
-        info->setType(IdentityInfo::Application);
-
-        mIdentity = Identity::newIdentity(*info);
-        if (!mIdentity) {
-            LOG_DEBUG("Identity could not be created for account");
-            return false;
-        }
-
-        connect(mIdentity, SIGNAL(credentialsStored(const quint32)),
-                this, SLOT(credentialsStored(const quint32)));
-        connect(mIdentity, SIGNAL(error(const SignOn::Error &)),
-                this, SLOT(error(const SignOn::Error &)));
-
-        mIdentity->storeCredentials();
-    } else {
-        mIdentity = Identity::existingIdentity(cId);
+        LOG_WARNING("Cannot authenticate, no credentials stored for service:" << m_accountService);
+        return false;
+    }
+    mIdentity = Identity::existingIdentity(cId);
+    if (!mIdentity) {
+        LOG_WARNING("Cannot get existing identity for credentials:" << cId);
+        return false;
     }
 
     mSession = mIdentity->createSession(mMethod.toLatin1());
@@ -231,16 +217,6 @@ void AuthHandler::authenticate()
         LOG_FATAL("Unsupported Method requested....................");
         emit failed();
     }
-}
-
-void AuthHandler::credentialsStored(const quint32 id)
-{
-    FUNCTION_CALL_TRACE;
-
-    mAccount->selectService(mAccountManager->service(m_accountService));
-    mAccount->setCredentialsId(id);
-    mAccount->sync();
-    mAccount->selectService(Accounts::Service());
 }
 
 void AuthHandler::error(const SignOn::Error & error)
