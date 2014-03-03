@@ -1,5 +1,5 @@
 /*
- * This file is part of buteo-gcontact-plugin package
+ * This file is part of buteo-sync-plugin-caldav package
  *
  * Copyright (C) 2013 Jolla Ltd. and/or its subsidiary(-ies).
  *
@@ -46,10 +46,8 @@ public:
     void updateEvent(KCalCore::Incidence::Ptr incidence);
     void createEvent(KCalCore::Incidence::Ptr incidence);
 
-public Q_SLOTS:
+private Q_SLOTS:
     void requestFinished();
-    void slotError(QNetworkReply::NetworkError error);
-    void slotSslErrors(QList<QSslError> errors);
 
 private:
     QStringList mUidList;

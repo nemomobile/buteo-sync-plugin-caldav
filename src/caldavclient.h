@@ -1,5 +1,5 @@
 /*
- * This file is part of buteo-gcontact-plugin package
+ * This file is part of buteo-sync-plugin-caldav package
  *
  * Copyright (C) 2013 Jolla Ltd. and/or its subsidiary(-ies).
  *
@@ -55,23 +55,19 @@ public:
     virtual Buteo::SyncResults getSyncResults() const;
     virtual bool cleanUp();
 
-Q_SIGNALS:
-    void stateChanged(Sync::SyncProgressDetail progress);
-    void syncFinished(Sync::SyncStatus);
-
 public Q_SLOTS:
     virtual void connectivityStateChanged(Sync::ConnectivityType aType, bool aState);
+
+private Q_SLOTS:
     bool start();
     void authenticationError();
-    void receiveStateChanged(Sync::SyncProgressDetail aState);
-    void receiveSyncFinished(Sync::SyncStatus);
+    void syncFinished(Sync::SyncStatus syncStatus);
     void requestFinished();
 
 private:
     void startSlowSync();
     void startQuickSync();
-    const QDateTime lastSyncTime();
-    const QString authToken();
+    QDateTime lastSyncTime();
     bool abort(Sync::SyncStatus status);
     bool initConfig();
     void closeConfig();

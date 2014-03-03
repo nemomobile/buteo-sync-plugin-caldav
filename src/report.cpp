@@ -1,5 +1,5 @@
 /*
- * This file is part of buteo-gcontact-plugin package
+ * This file is part of buteo-sync-plugin-caldav package
  *
  * Copyright (C) 2013 Jolla Ltd. and/or its subsidiary(-ies).
  *
@@ -51,6 +51,8 @@ Report::Report(QNetworkAccessManager *manager, Settings *settings, QObject *pare
 
 void Report::getAllEvents()
 {
+    FUNCTION_CALL_TRACE;
+
     QNetworkRequest request;
     QUrl url(mSettings->url());
     if (!mSettings->authToken().isEmpty()) {
@@ -65,23 +67,24 @@ void Report::getAllEvents()
     request.setRawHeader("Prefer", "return-minimal");
     request.setHeader(QNetworkRequest::ContentTypeHeader, "application/xml; charset=utf-8");
 
-    QBuffer *buffer = new QBuffer;
+    QBuffer *buffer = new QBuffer(this);
     buffer->setData("<c:calendar-query xmlns:d=\"DAV:\" xmlns:c=\"urn:ietf:params:xml:ns:caldav\">" \
                     "<d:prop> <d:getetag /> <c:calendar-data /> </d:prop>"       \
                     "<c:filter> <c:comp-filter name=\"VCALENDAR\" /> </c:filter>" \
                     "</c:calendar-query>");
-    mNReply = mNAManager->sendCustomRequest(request, REQUEST_TYPE.toLatin1(), buffer);
+    QNetworkReply *reply = mNAManager->sendCustomRequest(request, REQUEST_TYPE.toLatin1(), buffer);
     debugRequest(request, buffer->buffer());
-
-    connect(mNReply, SIGNAL(finished()), this, SLOT(processEvents()));
-    connect(mNReply, SIGNAL(error(QNetworkReply::NetworkError)),
+    connect(reply, SIGNAL(finished()), this, SLOT(processEvents()));
+    connect(reply, SIGNAL(error(QNetworkReply::NetworkError)),
             this, SLOT(slotError(QNetworkReply::NetworkError)));
-    connect(mNReply, SIGNAL(sslErrors(QList<QSslError>)),
+    connect(reply, SIGNAL(sslErrors(QList<QSslError>)),
             this, SLOT(slotSslErrors(QList<QSslError>)));
 }
 
 void Report::getAllETags()
 {
+    FUNCTION_CALL_TRACE;
+
     QNetworkRequest request;
     QUrl url(mSettings->url());
     if (!mSettings->authToken().isEmpty()) {
@@ -95,24 +98,26 @@ void Report::getAllETags()
     request.setRawHeader("Prefer", "return-minimal");
     request.setHeader(QNetworkRequest::ContentTypeHeader, "application/xml; charset=utf-8");
 
-    QBuffer *buffer = new QBuffer;
+    QBuffer *buffer = new QBuffer(this);
     buffer->setData("<c:calendar-query xmlns:d=\"DAV:\" xmlns:c=\"urn:ietf:params:xml:ns:caldav\">" \
                     "<d:prop> <d:getetag /> </d:prop> " \
                     "<c:filter> <c:comp-filter name=\"VCALENDAR\" > " \
                     "</c:comp-filter> </c:filter>" \
                     "</c:calendar-query> ");
-    mNReply = mNAManager->sendCustomRequest(request, REQUEST_TYPE.toLatin1(), buffer);
+    QNetworkReply *reply = mNAManager->sendCustomRequest(request, REQUEST_TYPE.toLatin1(), buffer);
     debugRequest(request, buffer->buffer());
 
-    connect(mNReply, SIGNAL(finished()), this, SLOT(processETags()));
-    connect(mNReply, SIGNAL(error(QNetworkReply::NetworkError)),
+    connect(reply, SIGNAL(finished()), this, SLOT(processETags()));
+    connect(reply, SIGNAL(error(QNetworkReply::NetworkError)),
             this, SLOT(slotError(QNetworkReply::NetworkError)));
-    connect(mNReply, SIGNAL(sslErrors(QList<QSslError>)),
+    connect(reply, SIGNAL(sslErrors(QList<QSslError>)),
             this, SLOT(slotSslErrors(QList<QSslError>)));
 }
 
 void Report::multiGetEvents(const QStringList &eventIdList, bool includeCalendarData)
 {
+    FUNCTION_CALL_TRACE;
+
     if (eventIdList.isEmpty()) return;
 
     QNetworkRequest request;
@@ -143,24 +148,37 @@ void Report::multiGetEvents(const QStringList &eventIdList, bool includeCalendar
     }
     multiGetRequest.append("</c:calendar-multiget>");
 
-    QBuffer *buffer = new QBuffer;
+    QBuffer *buffer = new QBuffer(this);
     buffer->setData(multiGetRequest.toLatin1());
-    mNReply = mNAManager->sendCustomRequest(request, REQUEST_TYPE.toLatin1(), buffer);
+    QNetworkReply *reply = mNAManager->sendCustomRequest(request, REQUEST_TYPE.toLatin1(), buffer);
 
     if (includeCalendarData) {
-        connect(mNReply, SIGNAL(finished()), this, SLOT(processEvents()));
+        connect(reply, SIGNAL(finished()), this, SLOT(processEvents()));
     } else {
-        connect(mNReply, SIGNAL(finished()), this, SLOT(updateETags()));
+        connect(reply, SIGNAL(finished()), this, SLOT(updateETags()));
     }
-    connect(mNReply, SIGNAL(error(QNetworkReply::NetworkError)),
+    connect(reply, SIGNAL(error(QNetworkReply::NetworkError)),
             this, SLOT(slotError(QNetworkReply::NetworkError)));
-    connect(mNReply, SIGNAL(sslErrors(QList<QSslError>)),
+    connect(reply, SIGNAL(sslErrors(QList<QSslError>)),
             this, SLOT(slotSslErrors(QList<QSslError>)));
 }
 
 void Report::processEvents()
 {
-    QByteArray data = mNReply->readAll();
+    FUNCTION_CALL_TRACE;
+
+    QNetworkReply *reply = qobject_cast<QNetworkReply*>(sender());
+    if (!reply) {
+        emit syncError(Sync::SYNC_ERROR);
+        return;
+    }
+    if (reply->error() != QNetworkReply::NoError) {
+        emit finished();
+        return;
+    }
+    QByteArray data = reply->readAll();
+    reply->deleteLater();
+
     if (!data.isNull() && !data.isEmpty()) {
         Reader reader;
         reader.read(data);
@@ -181,9 +199,8 @@ void Report::processEvents()
             }
         }
         if (nbUid.isNull() || nbUid.isEmpty()) {
-            LOG_WARNING("Not able to find NoteBook's UID...... Wont Save Events ");
+            LOG_WARNING("Not able to find NoteBook's UID...... Won't Save Events ");
             emit syncError(Sync::SYNC_ERROR);
-            mNReply->deleteLater();
             return;
         }
         storage->loadNotebookIncidences(nbUid);
@@ -271,21 +288,32 @@ void Report::processEvents()
         storage->save();
         storage->close();
     }
-    mNReply->deleteLater();
     emit finished();
 }
 
 void Report::processETags()
 {
-    QVariant statusCode = mNReply->attribute(QNetworkRequest::HttpStatusCodeAttribute);
+    FUNCTION_CALL_TRACE;
+
+    QNetworkReply *reply = qobject_cast<QNetworkReply*>(sender());
+    if (!reply) {
+        emit syncError(Sync::SYNC_ERROR);
+        return;
+    }
+    QVariant statusCode = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute);
     if (statusCode.isValid()) {
         int status = statusCode.toInt();
         if (status > 299) {
+            qWarning() << "Got error status response for REPORT:" << status;
+            reply->deleteLater();
+            emit finished();
             return;
         }
     }
 
-    QByteArray data = mNReply->readAll();
+    QByteArray data = reply->readAll();
+    reply->deleteLater();
+
     if (!data.isNull() && !data.isEmpty()) {
         LOG_DEBUG(data);
         Reader reader;
@@ -306,9 +334,8 @@ void Report::processETags()
             }
         }
         if (nbUid.isNull() || nbUid.isEmpty()) {
-            LOG_WARNING("Not able to find NoteBook's UID...... Wont Save Events ");
+            LOG_WARNING("Not able to find NoteBook's UID...... Won't Save Events ");
             emit syncError(Sync::SYNC_ERROR);
-            mNReply->deleteLater();
             return;
         }
         storage->loadNotebookIncidences(nbUid);
@@ -354,7 +381,6 @@ void Report::processETags()
         }
 
         eventIdList.append(map.keys());
-        mNReply->deleteLater();
         if (!eventIdList.isEmpty()) {
             multiGetEvents(eventIdList, true);
         } else {
@@ -369,7 +395,21 @@ void Report::processETags()
 
 void Report::updateETags()
 {
-    QByteArray data = mNReply->readAll();
+    FUNCTION_CALL_TRACE;
+
+    QNetworkReply *reply = qobject_cast<QNetworkReply*>(sender());
+    if (!reply) {
+        emit syncError(Sync::SYNC_ERROR);
+        return;
+    }
+    if (reply->error() != QNetworkReply::NoError) {
+        emit finished();
+        return;
+    }
+    QByteArray data = reply->readAll();
+    debugReply(*reply, data);
+    reply->deleteLater();
+
     if (!data.isNull() && !data.isEmpty()) {
         Reader reader;
         reader.read(data);
@@ -419,24 +459,4 @@ void Report::updateETags()
     }
 
     emit finished();
-}
-
-void Report::slotError(QNetworkReply::NetworkError error)
-{
-    qDebug() << "Error # " << error;
-    if (error <= 200) {
-        emit syncError(Sync::SYNC_CONNECTION_ERROR);
-    } else if (error > 200 && error < 400) {
-        emit syncError(Sync::SYNC_SERVER_FAILURE);
-    } else {
-        emit syncError(Sync::SYNC_ERROR);
-    }
-}
-
-void Report::slotSslErrors(QList<QSslError> errors)
-{
-    qDebug() << "SSL Error";
-    if (mSettings->ignoreSSLErrors()) {
-        mNReply->ignoreSslErrors(errors);
-    }
 }

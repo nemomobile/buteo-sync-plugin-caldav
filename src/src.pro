@@ -40,6 +40,7 @@ SOURCES += \
     reader.cpp \
     cditem.cpp \
     settings.cpp \
+    request.cpp \
     get.cpp \
     authhandler.cpp
 

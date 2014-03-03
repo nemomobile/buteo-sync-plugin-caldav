@@ -1,5 +1,5 @@
 /*
- * This file is part of buteo-gcontact-plugin package
+ * This file is part of buteo-sync-plugin-caldav package
  *
  * Copyright (C) 2013 Jolla Ltd. and/or its subsidiary(-ies).
  *
@@ -25,7 +25,6 @@
 #include "settings.h"
 
 #include <QNetworkAccessManager>
-#include <QBuffer>
 #include <QDebug>
 
 Delete::Delete(QNetworkAccessManager *manager, Settings *settings, QObject *parent)
@@ -34,9 +33,10 @@ Delete::Delete(QNetworkAccessManager *manager, Settings *settings, QObject *pare
     FUNCTION_CALL_TRACE;
 }
 
-
 void Delete::deleteEvent(const QString &uri)
 {
+    FUNCTION_CALL_TRACE;
+
     QNetworkRequest request;
     QUrl url(mSettings->url() + uri);
     if (!mSettings->authToken().isEmpty()) {
@@ -48,46 +48,30 @@ void Delete::deleteEvent(const QString &uri)
     }
 
     request.setUrl(url);
-    mNReply = mNAManager->sendCustomRequest(request, REQUEST_TYPE.toLatin1());
-    debugRequest(request, "");
-    connect(mNReply, SIGNAL(finished()), this, SLOT(requestFinished()));
-    connect(mNReply, SIGNAL(error(QNetworkReply::NetworkError)),
+    QNetworkReply *reply = mNAManager->sendCustomRequest(request, REQUEST_TYPE.toLatin1());
+    debugRequest(request, QStringLiteral(""));
+    connect(reply, SIGNAL(finished()), this, SLOT(requestFinished()));
+    connect(reply, SIGNAL(error(QNetworkReply::NetworkError)),
             this, SLOT(slotError(QNetworkReply::NetworkError)));
-    connect(mNReply, SIGNAL(sslErrors(QList<QSslError>)),
+    connect(reply, SIGNAL(sslErrors(QList<QSslError>)),
             this, SLOT(slotSslErrors(QList<QSslError>)));
 }
 
 void Delete::requestFinished()
 {
-    LOG_DEBUG("DELETE Request Finished............" << mNReply->readAll());
-    QVariant statusCode = mNReply->attribute(QNetworkRequest::HttpStatusCodeAttribute);
-    if (statusCode.isValid()) {
-        int status = statusCode.toInt();
-        qDebug() << "Status Code : " << status << "\n";
-        emit finished();
-    }
-    const QList<QByteArray>& rawHeaderList(mNReply->rawHeaderList());
-    Q_FOREACH (const QByteArray &rawHeader, rawHeaderList) {
-        qDebug() << rawHeader << " : " << mNReply->rawHeader(rawHeader);
-    }
-    qDebug() << "---------------------------------------------------------------------\n";
-}
+    FUNCTION_CALL_TRACE;
 
-void Delete::slotError(QNetworkReply::NetworkError error)
-{
-    if (error <= 200) {
-        emit syncError(Sync::SYNC_CONNECTION_ERROR);
-    } else if (error > 200 && error < 400) {
-        emit syncError(Sync::SYNC_SERVER_FAILURE);
-    } else {
+    QNetworkReply *reply = qobject_cast<QNetworkReply*>(sender());
+    if (!reply) {
         emit syncError(Sync::SYNC_ERROR);
+        return;
     }
-}
+    if (reply->error() != QNetworkReply::NoError) {
+        emit finished();
+        return;
+    }
+    debugReplyAndReadAll(reply);
+    reply->deleteLater();
 
-void Delete::slotSslErrors(QList<QSslError> errors)
-{
-    qDebug() << "SSL Error";
-    if (mSettings->ignoreSSLErrors()) {
-        mNReply->ignoreSslErrors(errors);
-    }
+    emit finished();
 }

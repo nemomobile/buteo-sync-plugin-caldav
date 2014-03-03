@@ -1,5 +1,5 @@
 /*
- * This file is part of buteo-gcontact-plugin package
+ * This file is part of buteo-sync-plugin-caldav package
  *
  * Copyright (C) 2013 Jolla Ltd. and/or its subsidiary(-ies).
  *
@@ -38,7 +38,7 @@ class AuthHandler : public QObject
 {
     Q_OBJECT
 public:
-    explicit AuthHandler(Accounts::Manager *manager, const quint32 accountId, const QString &remoteDatabasePath, QObject *parent = 0);
+    explicit AuthHandler(Accounts::Manager *manager, const quint32 accountId, const QString &accountService, const QString &remoteDatabasePath, QObject *parent = 0);
 
     void authenticate();
     const QString token();
@@ -64,19 +64,20 @@ private:
     QString storedKeyValue(const char *provider, const char *service, const char *keyName);
 
 private Q_SLOTS:
-    void credentialsStored(const quint32);
     void error(const SignOn::Error &);
     void sessionResponse(const SignOn::SessionData &);
 
 private:
     SignOn::Identity    *mIdentity;
     SignOn::AuthSession *mSession;
+    Accounts::Manager   *mAccountManager;
     Accounts::Account   *mAccount;
     QString mToken;
     QString mUsername;
     QString mPassword;
     QString mRemoteDatabasePath;
     QString mMethod, mMechanism;
+    QString m_accountService;
 };
 
 #endif // AUTHHANDLER_H
