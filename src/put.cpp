@@ -134,6 +134,10 @@ void Put::requestFinished()
         emit syncError(Sync::SYNC_ERROR);
         return;
     }
+    if (reply->error() != QNetworkReply::NoError) {
+        emit finished();
+        return;
+    }
     debugReplyAndReadAll(reply);
     reply->deleteLater();
 

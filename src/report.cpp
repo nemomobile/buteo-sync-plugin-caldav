@@ -172,6 +172,10 @@ void Report::processEvents()
         emit syncError(Sync::SYNC_ERROR);
         return;
     }
+    if (reply->error() != QNetworkReply::NoError) {
+        emit finished();
+        return;
+    }
     QByteArray data = reply->readAll();
     reply->deleteLater();
 
@@ -300,7 +304,9 @@ void Report::processETags()
     if (statusCode.isValid()) {
         int status = statusCode.toInt();
         if (status > 299) {
+            qWarning() << "Got error status response for REPORT:" << status;
             reply->deleteLater();
+            emit finished();
             return;
         }
     }
@@ -394,6 +400,10 @@ void Report::updateETags()
     QNetworkReply *reply = qobject_cast<QNetworkReply*>(sender());
     if (!reply) {
         emit syncError(Sync::SYNC_ERROR);
+        return;
+    }
+    if (reply->error() != QNetworkReply::NoError) {
+        emit finished();
         return;
     }
     QByteArray data = reply->readAll();

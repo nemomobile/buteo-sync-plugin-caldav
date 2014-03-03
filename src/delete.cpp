@@ -66,12 +66,12 @@ void Delete::requestFinished()
         emit syncError(Sync::SYNC_ERROR);
         return;
     }
+    if (reply->error() != QNetworkReply::NoError) {
+        emit finished();
+        return;
+    }
     debugReplyAndReadAll(reply);
-
-    QVariant statusCode = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute);
     reply->deleteLater();
 
-    if (statusCode.isValid()) {
-        emit finished();
-    }
+    emit finished();
 }
