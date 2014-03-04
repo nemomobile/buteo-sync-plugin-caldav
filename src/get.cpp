@@ -31,8 +31,6 @@ void Get::getEvent(const QString &u)
     QNetworkReply *reply = mNAManager->get(request);
     debugRequest(request, QStringLiteral(""));
     connect(reply, SIGNAL(finished()), this, SLOT(requestFinished()));
-    connect(reply, SIGNAL(error(QNetworkReply::NetworkError)),
-            this, SLOT(slotError(QNetworkReply::NetworkError)));
     connect(reply, SIGNAL(sslErrors(QList<QSslError>)),
             this, SLOT(slotSslErrors(QList<QSslError>)));
 }
@@ -40,20 +38,22 @@ void Get::getEvent(const QString &u)
 void Get::requestFinished()
 {
     FUNCTION_CALL_TRACE;
-    QNetworkReply *reply = qobject_cast<QNetworkReply*>(sender());
-    if (!reply) {
-        emit syncError(Sync::SYNC_ERROR);
+
+    if (wasDeleted()) {
+        LOG_DEBUG(command() << "request was aborted");
         return;
     }
-    if (reply->error() != QNetworkReply::NoError) {
-        emit finished();
+
+    QNetworkReply *reply = qobject_cast<QNetworkReply*>(sender());
+    if (!reply) {
+        finishedWithInternalError();
         return;
     }
     debugReplyAndReadAll(reply);
-    reply->deleteLater();
 
     // TODO this needs to save the received vcal data into the calendar database.
     LOG_CRITICAL("Get::requestFinished() is not implemented!");
 
-    emit finished();
+    finishedWithReplyResult(reply->error());
+    reply->deleteLater();
 }

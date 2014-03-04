@@ -28,8 +28,10 @@
 
 #include <LogMacros.h>
 #include <SyncCommonDefs.h>
+#include <SyncResults.h>
 
 #include <QObject>
+#include <QPointer>
 #include <QNetworkReply>
 #include <QSslError>
 #include <QNetworkRequest>
@@ -43,15 +45,24 @@ public:
                      const QString &requestType,
                      QObject *parent = 0);
 
+    QString command() const;
+    int errorCode() const;
+    QString errorString() const;
+
 Q_SIGNALS:
     void finished();
-    void syncError(Sync::SyncStatus);
 
 protected Q_SLOTS:
-    virtual void slotError(QNetworkReply::NetworkError);
     virtual void slotSslErrors(QList<QSslError>);
 
 protected:
+    bool wasDeleted() const;
+
+    void finishedWithSuccess();
+    void finishedWithError(int minorCode, const QString &errorString);
+    void finishedWithInternalError();
+    void finishedWithReplyResult(QNetworkReply::NetworkError error);
+
     void debugRequest(const QNetworkRequest &request, const QByteArray &data);
     void debugRequest(const QNetworkRequest &request, const QString &data);
     void debugReply(const QNetworkReply &reply, const QByteArray &data);
@@ -60,6 +71,9 @@ protected:
     QNetworkAccessManager *mNAManager;
     const QString REQUEST_TYPE;
     Settings* mSettings;
+    QPointer<Request> mSelfPointer;
+    int mMinorCode;
+    QString mErrorString;
 };
 
 #endif // REQUEST_H

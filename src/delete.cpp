@@ -27,15 +27,24 @@
 #include <QNetworkAccessManager>
 #include <QDebug>
 
+static const QString VCalExtension = QStringLiteral(".ics");
+
 Delete::Delete(QNetworkAccessManager *manager, Settings *settings, QObject *parent)
     : Request(manager, settings, "DELETE", parent)
 {
     FUNCTION_CALL_TRACE;
 }
 
-void Delete::deleteEvent(const QString &uri)
+void Delete::deleteEvent(KCalCore::Incidence::Ptr incidence)
 {
     FUNCTION_CALL_TRACE;
+
+    QString uri = resourceUriForIncidence(incidence);
+    if (uri.isEmpty()) {
+        finishedWithError(Buteo::SyncResults::INTERNAL_ERROR,
+                          QString("DELETE not sent, cannot get uri for incidence %1").arg(incidence->uid()));
+        return;
+    }
 
     QNetworkRequest request;
     QUrl url(mSettings->url() + uri);
@@ -51,8 +60,6 @@ void Delete::deleteEvent(const QString &uri)
     QNetworkReply *reply = mNAManager->sendCustomRequest(request, REQUEST_TYPE.toLatin1());
     debugRequest(request, QStringLiteral(""));
     connect(reply, SIGNAL(finished()), this, SLOT(requestFinished()));
-    connect(reply, SIGNAL(error(QNetworkReply::NetworkError)),
-            this, SLOT(slotError(QNetworkReply::NetworkError)));
     connect(reply, SIGNAL(sslErrors(QList<QSslError>)),
             this, SLOT(slotSslErrors(QList<QSslError>)));
 }
@@ -61,17 +68,31 @@ void Delete::requestFinished()
 {
     FUNCTION_CALL_TRACE;
 
-    QNetworkReply *reply = qobject_cast<QNetworkReply*>(sender());
-    if (!reply) {
-        emit syncError(Sync::SYNC_ERROR);
+    if (wasDeleted()) {
+        LOG_DEBUG(command() << "request was aborted");
         return;
     }
-    if (reply->error() != QNetworkReply::NoError) {
-        emit finished();
+
+    QNetworkReply *reply = qobject_cast<QNetworkReply*>(sender());
+    if (!reply) {
+        finishedWithInternalError();
         return;
     }
     debugReplyAndReadAll(reply);
-    reply->deleteLater();
 
-    emit finished();
+    finishedWithReplyResult(reply->error());
+    reply->deleteLater();
+}
+
+QString Delete::resourceUriForIncidence(KCalCore::Incidence::Ptr incidence)
+{
+    QString uri = incidence->customProperty("buteo", "uri");
+    if (!uri.isEmpty()) {
+        return uri.split("/", QString::SkipEmptyParts).last();
+    }
+    QString path = incidence->uid();
+    if (!path.isEmpty()) {
+        path += VCalExtension;
+    }
+    return path;
 }

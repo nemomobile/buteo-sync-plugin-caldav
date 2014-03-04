@@ -75,8 +75,6 @@ void Report::getAllEvents()
     QNetworkReply *reply = mNAManager->sendCustomRequest(request, REQUEST_TYPE.toLatin1(), buffer);
     debugRequest(request, buffer->buffer());
     connect(reply, SIGNAL(finished()), this, SLOT(processEvents()));
-    connect(reply, SIGNAL(error(QNetworkReply::NetworkError)),
-            this, SLOT(slotError(QNetworkReply::NetworkError)));
     connect(reply, SIGNAL(sslErrors(QList<QSslError>)),
             this, SLOT(slotSslErrors(QList<QSslError>)));
 }
@@ -108,8 +106,6 @@ void Report::getAllETags()
     debugRequest(request, buffer->buffer());
 
     connect(reply, SIGNAL(finished()), this, SLOT(processETags()));
-    connect(reply, SIGNAL(error(QNetworkReply::NetworkError)),
-            this, SLOT(slotError(QNetworkReply::NetworkError)));
     connect(reply, SIGNAL(sslErrors(QList<QSslError>)),
             this, SLOT(slotSslErrors(QList<QSslError>)));
 }
@@ -157,8 +153,6 @@ void Report::multiGetEvents(const QStringList &eventIdList, bool includeCalendar
     } else {
         connect(reply, SIGNAL(finished()), this, SLOT(updateETags()));
     }
-    connect(reply, SIGNAL(error(QNetworkReply::NetworkError)),
-            this, SLOT(slotError(QNetworkReply::NetworkError)));
     connect(reply, SIGNAL(sslErrors(QList<QSslError>)),
             this, SLOT(slotSslErrors(QList<QSslError>)));
 }
@@ -167,13 +161,18 @@ void Report::processEvents()
 {
     FUNCTION_CALL_TRACE;
 
+    if (wasDeleted()) {
+        LOG_DEBUG(command() << "request was aborted");
+        return;
+    }
+
     QNetworkReply *reply = qobject_cast<QNetworkReply*>(sender());
     if (!reply) {
-        emit syncError(Sync::SYNC_ERROR);
+        finishedWithInternalError();
         return;
     }
     if (reply->error() != QNetworkReply::NoError) {
-        emit finished();
+        finishedWithReplyResult(reply->error());
         return;
     }
     QByteArray data = reply->readAll();
@@ -194,13 +193,12 @@ void Report::processEvents()
         LOG_DEBUG("Total Number of Notebooks in device = " << notebookList.count());
         Q_FOREACH (mKCal::Notebook::Ptr nbPtr, notebookList) {
             LOG_DEBUG(nbPtr->uid() << "     Notebook's' Account ID " << nbPtr->account() << "    Looking for Account ID = " << aId);
-            if(nbPtr->account() == aId) {
+            if (nbPtr->account() == aId) {
                 nbUid = nbPtr->uid();
             }
         }
         if (nbUid.isNull() || nbUid.isEmpty()) {
-            LOG_WARNING("Not able to find NoteBook's UID...... Won't Save Events ");
-            emit syncError(Sync::SYNC_ERROR);
+            finishedWithError(Buteo::SyncResults::DATABASE_FAILURE, QStringLiteral("Cannot find notebook UID, cannot save any events"));
             return;
         }
         storage->loadNotebookIncidences(nbUid);
@@ -288,25 +286,30 @@ void Report::processEvents()
         storage->save();
         storage->close();
     }
-    emit finished();
+    finishedWithSuccess();
 }
 
 void Report::processETags()
 {
     FUNCTION_CALL_TRACE;
 
+    if (wasDeleted()) {
+        LOG_DEBUG(command() << "request was aborted");
+        return;
+    }
+
     QNetworkReply *reply = qobject_cast<QNetworkReply*>(sender());
     if (!reply) {
-        emit syncError(Sync::SYNC_ERROR);
+        finishedWithInternalError();
         return;
     }
     QVariant statusCode = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute);
     if (statusCode.isValid()) {
         int status = statusCode.toInt();
         if (status > 299) {
-            qWarning() << "Got error status response for REPORT:" << status;
+            finishedWithError(Buteo::SyncResults::INTERNAL_ERROR,
+                              QString("Got error status response for REPORT: %1").arg(status));
             reply->deleteLater();
-            emit finished();
             return;
         }
     }
@@ -333,9 +336,8 @@ void Report::processETags()
                 nbUid = nbPtr->uid();
             }
         }
-        if (nbUid.isNull() || nbUid.isEmpty()) {
-            LOG_WARNING("Not able to find NoteBook's UID...... Won't Save Events ");
-            emit syncError(Sync::SYNC_ERROR);
+        if (nbUid.isNull() || nbUid.isEmpty()) {            
+            finishedWithError(Buteo::SyncResults::DATABASE_FAILURE, QStringLiteral("Cannot find notebook UID, cannot save any events"));
             return;
         }
         storage->loadNotebookIncidences(nbUid);
@@ -384,7 +386,7 @@ void Report::processETags()
         if (!eventIdList.isEmpty()) {
             multiGetEvents(eventIdList, true);
         } else {
-            emit finished();
+            finishedWithSuccess();
         }
 
         calendar->save();
@@ -399,11 +401,11 @@ void Report::updateETags()
 
     QNetworkReply *reply = qobject_cast<QNetworkReply*>(sender());
     if (!reply) {
-        emit syncError(Sync::SYNC_ERROR);
+        finishedWithInternalError();
         return;
     }
     if (reply->error() != QNetworkReply::NoError) {
-        emit finished();
+        finishedWithReplyResult(reply->error());
         return;
     }
     QByteArray data = reply->readAll();
@@ -458,5 +460,5 @@ void Report::updateETags()
         storage->close();
     }
 
-    emit finished();
+    finishedWithSuccess();
 }

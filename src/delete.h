@@ -26,6 +26,8 @@
 
 #include "request.h"
 
+#include <incidence.h>
+
 #include <QObject>
 #include <QNetworkReply>
 #include <QSslError>
@@ -40,10 +42,13 @@ class Delete : public Request
 public:
     explicit Delete(QNetworkAccessManager *manager, Settings *settings, QObject *parent = 0);
 
-    void deleteEvent(const QString &uri);
+    void deleteEvent(KCalCore::Incidence::Ptr incidence);
 
 private Q_SLOTS:
     void requestFinished();
+
+private:
+    QString resourceUriForIncidence(KCalCore::Incidence::Ptr incidence);
 };
 
 #endif // DELETE_H

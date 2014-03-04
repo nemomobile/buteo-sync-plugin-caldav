@@ -29,14 +29,19 @@
 #include "settings.h"
 
 #include <QList>
-#include <QPair>
-#include <QtNetwork/QNetworkAccessManager>
+#include <QSet>
+
+#include <incidence.h>
+#include <extendedstorage.h>
 
 #include <ClientPlugin.h>
 #include <SyncResults.h>
 #include <SyncCommonDefs.h>
 
 #include <Accounts/Manager>
+
+class QNetworkAccessManager;
+class Request;
 
 class BUTEOCALDAVPLUGINSHARED_EXPORT CalDavClient : public Buteo::ClientPlugin
 {
@@ -61,19 +66,34 @@ public Q_SLOTS:
 private Q_SLOTS:
     bool start();
     void authenticationError();
-    void syncFinished(Sync::SyncStatus syncStatus);
-    void requestFinished();
+    void reportRequestFinished();
+    void nonReportRequestFinished();
 
 private:
     void startSlowSync();
     void startQuickSync();
     QDateTime lastSyncTime();
-    bool abort(Sync::SyncStatus status);
+    void abort(Sync::SyncStatus aStatus = Sync::SYNC_ABORTED);
     bool initConfig();
     void closeConfig();
+    void syncFinished(int minorErrorCode, const QString &errorMessage);
+    void clearRequests();
+    void retrieveETags();
+
+    bool loadStorageChanges(mKCal::ExtendedStorage::Ptr storage,
+                            const KDateTime &fromDate,
+                            KCalCore::Incidence::List *inserted,
+                            KCalCore::Incidence::List *modified,
+                            KCalCore::Incidence::List *deleted,
+                            QString *error);
+    int removeCommonIncidences(KCalCore::Incidence::List *inserted,
+                               KCalCore::Incidence::List *deleted);
+
+
     Buteo::SyncProfile::SyncDirection syncDirection();
     Buteo::SyncProfile::ConflictResolutionPolicy conflictResolutionPolicy();
 
+    QSet<Request *>             mRequests;
     QNetworkAccessManager*      mNAManager;
     Accounts::Manager*          mManager;
     AuthHandler*                mAuth;
