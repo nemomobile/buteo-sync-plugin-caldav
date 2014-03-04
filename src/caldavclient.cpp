@@ -347,15 +347,30 @@ bool CalDavClient::loadStorageChanges(mKCal::ExtendedStorage::Ptr storage,
 {
     FUNCTION_CALL_TRACE;
 
-    if (!storage->insertedIncidences(inserted, fromDate)) {
+    QString accountId = QString::number(mSettings.accountId());
+    QString notebookUid;
+    mKCal::Notebook::List notebookList = storage->notebooks();
+    Q_FOREACH (mKCal::Notebook::Ptr notebook, notebookList) {
+        if (notebook->account() == accountId) {
+            notebookUid = notebook->uid();
+            break;
+        }
+    }
+
+    if (notebookUid.isEmpty()) {
+        *error = "Cannot find mkCal::Notebook for account: " + accountId;
+        return false;
+    }
+
+    if (!storage->insertedIncidences(inserted, fromDate, notebookUid)) {
         *error = "mKCal::ExtendedStorage::insertedIncidences() failed";
         return false;
     }
-    if (!storage->modifiedIncidences(modified, fromDate)) {
+    if (!storage->modifiedIncidences(modified, fromDate, notebookUid)) {
         *error = "mKCal::ExtendedStorage::modifiedIncidences() failed";
         return false;
     }
-    if (!storage->deletedIncidences(deleted, fromDate)) {
+    if (!storage->deletedIncidences(deleted, fromDate, notebookUid)) {
         *error = "mKCal::ExtendedStorage::deletedIncidences() failed";
         return false;
     }
