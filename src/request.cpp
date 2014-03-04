@@ -31,25 +31,40 @@ Request::Request(QNetworkAccessManager *manager,
     , mNAManager(manager)
     , REQUEST_TYPE(requestType)
     , mSettings(settings)
+    , mMinorCode(Buteo::SyncResults::NO_ERROR)
 {
     FUNCTION_CALL_TRACE;
+
+    mSelfPointer = this;
 }
 
-void Request::slotError(QNetworkReply::NetworkError error)
+int Request::errorCode() const
 {
-    FUNCTION_CALL_TRACE;
-    QNetworkReply *reply = qobject_cast<QNetworkReply*>(sender());
-    if (!reply) {
-        return;
-    }
-    debugReplyAndReadAll(reply);
+    return mMinorCode;
+}
 
-    if (error <= 200) {
-        emit syncError(Sync::SYNC_CONNECTION_ERROR);
-    } else if (error > 200 && error < 400) {
-        emit syncError(Sync::SYNC_SERVER_FAILURE);
+QString Request::errorString() const
+{
+    return mErrorString;
+}
+
+QString Request::command() const
+{
+    return REQUEST_TYPE;
+}
+
+void Request::finishedWithReplyResult(QNetworkReply::NetworkError error)
+{
+    if (error == QNetworkReply::NoError) {
+        finishedWithSuccess();
     } else {
-        emit syncError(Sync::SYNC_ERROR);
+        int errorCode = Buteo::SyncResults::INTERNAL_ERROR;
+        if (error == QNetworkReply::SslHandshakeFailedError) {
+            errorCode = Buteo::SyncResults::AUTHENTICATION_FAILURE;
+        } else if (error < 200) {
+            errorCode = Buteo::SyncResults::CONNECTION_ERROR;
+        }
+        finishedWithError(errorCode, QString("Network request failed with QNetworkReply::NetworkError: %1").arg(error));
     }
 }
 
@@ -64,7 +79,32 @@ void Request::slotSslErrors(QList<QSslError> errors)
 
     if (mSettings->ignoreSSLErrors()) {
         reply->ignoreSslErrors(errors);
+    } else {
+        qWarning() << command() << "request failed with SSL error";
     }
+}
+
+void Request::finishedWithError(int minorCode, const QString &errorString)
+{
+    mMinorCode = minorCode;
+    mErrorString = errorString;
+    emit finished();
+}
+
+void Request::finishedWithInternalError()
+{
+    finishedWithError(Buteo::SyncResults::INTERNAL_ERROR, QStringLiteral("Internal error"));
+}
+
+void Request::finishedWithSuccess()
+{
+    mMinorCode = Buteo::SyncResults::NO_ERROR;
+    emit finished();
+}
+
+bool Request::wasDeleted() const
+{
+    return mSelfPointer == 0;
 }
 
 void Request::debugRequest(const QNetworkRequest &request, const QByteArray &data)

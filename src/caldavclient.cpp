@@ -32,6 +32,7 @@
 #include <notebook.h>
 #include <icalformat.h>
 
+#include <QNetworkAccessManager>
 #include <QNetworkReply>
 #include <QDateTime>
 
@@ -56,8 +57,6 @@ extern "C" void destroyPlugin(CalDavClient *aClient)
 {
     delete aClient;
 }
-
-static const QString VCalExtension = QStringLiteral(".ics");
 
 CalDavClient::CalDavClient(const QString& aPluginName,
                             const Buteo::SyncProfile& aProfile,
@@ -119,19 +118,7 @@ bool CalDavClient::startSync()
 void CalDavClient::abortSync(Sync::SyncStatus aStatus)
 {
     FUNCTION_CALL_TRACE;
-    Sync::SyncStatus state = Sync::SYNC_ABORTED;
-
-    if (aStatus == Sync::SYNC_ERROR) {
-        state = Sync::SYNC_CONNECTION_ERROR;
-    }
-
-    if (!this->abort(state)) {
-        LOG_DEBUG("Agent not active, aborting immediately");
-        syncFinished(Sync::SYNC_ABORTED);
-
-    } else {
-        LOG_DEBUG("Agent active, abort event posted");
-    }
+    abort(aStatus);
 }
 
 bool CalDavClient::start()
@@ -168,11 +155,11 @@ bool CalDavClient::start()
     return true;
 }
 
-bool CalDavClient::abort(Sync::SyncStatus status)
+void CalDavClient::abort(Sync::SyncStatus status)
 {
-    Q_UNUSED(status)
-    syncFinished(Sync::SYNC_ABORTED);
-    return true;
+    FUNCTION_CALL_TRACE;
+
+    syncFinished(status, QStringLiteral("Sync aborted"));
 }
 
 bool CalDavClient::cleanUp()
@@ -208,8 +195,7 @@ bool CalDavClient::cleanUp()
     calendar->close();
 
     if (nbUid.isNull() || nbUid.isEmpty()) {
-        LOG_WARNING("Not able to find NoteBook's UID...... Won't Save Events ");
-        syncFinished(Sync::SYNC_ERROR);
+        syncFinished(Buteo::SyncResults::DATABASE_FAILURE, QStringLiteral("Cannot find notebook UID, cannot save any events"));
         return false;
     }
 
@@ -275,74 +261,28 @@ bool CalDavClient::initConfig()
     return true;
 }
 
-void CalDavClient::syncFinished(Sync::SyncStatus syncStatus)
+void CalDavClient::syncFinished(int minorErrorCode, const QString &errorMessage)
 {
     FUNCTION_CALL_TRACE;
 
-    int minorErrorCode = -1;
-
-    switch (syncStatus)
-    {
-    case Sync::SYNC_QUEUED:
-    case Sync::SYNC_STARTED:
-    case Sync::SYNC_PROGRESS:
-        // no error, sync has not finished
-        break;
-    case Sync::SYNC_ERROR:
-        minorErrorCode = Buteo::SyncResults::INTERNAL_ERROR;
-        break;
-    case Sync::SYNC_DONE:
-        minorErrorCode = Buteo::SyncResults::NO_ERROR;
-        break;
-    case Sync::SYNC_ABORTED:
-        minorErrorCode = Buteo::SyncResults::ABORTED;
-        break;
-    case Sync::SYNC_CANCELLED:
-        minorErrorCode = Buteo::SyncResults::ABORTED;
-        break;
-    case Sync::SYNC_STOPPING:
-        minorErrorCode = Buteo::SyncResults::ABORTED;
-        break;
-    case Sync::SYNC_NOTPOSSIBLE:
-        minorErrorCode = Buteo::SyncResults::INTERNAL_ERROR;
-        break;
-    case Sync::SYNC_AUTHENTICATION_FAILURE:
-        minorErrorCode = Buteo::SyncResults::AUTHENTICATION_FAILURE;
-        break;
-    case Sync::SYNC_DATABASE_FAILURE:
-        minorErrorCode = Buteo::SyncResults::DATABASE_FAILURE;
-        break;
-    case Sync::SYNC_CONNECTION_ERROR:
-        minorErrorCode = Buteo::SyncResults::CONNECTION_ERROR;
-        break;
-    case Sync::SYNC_SERVER_FAILURE:
-        minorErrorCode = Buteo::SyncResults::INTERNAL_ERROR;
-        break;
-    case Sync::SYNC_BAD_REQUEST:
-        minorErrorCode = Buteo::SyncResults::INTERNAL_ERROR;
-        break;
-    default:
-        qWarning() << "Unrecognized sync status" << syncStatus << ", defaulting to INTERNAL_ERROR result";
-        minorErrorCode = Buteo::SyncResults::INTERNAL_ERROR;
-        break;
-    }
+    clearRequests();
 
     if (minorErrorCode == Buteo::SyncResults::NO_ERROR) {
         mResults = Buteo::SyncResults(QDateTime::currentDateTime().toUTC(),
                                       Buteo::SyncResults::SYNC_RESULT_SUCCESS,
                                       Buteo::SyncResults::NO_ERROR);
-        emit success(getProfileName(), QString::number(syncStatus));
-    } else if (minorErrorCode > 0) {
+        emit success(getProfileName(), QString());
+    } else {
         mResults = Buteo::SyncResults(QDateTime::currentDateTime().toUTC(),
                                       Buteo::SyncResults::SYNC_RESULT_FAILED,
                                       minorErrorCode);
-        emit error(getProfileName(), "", syncStatus);
+        emit error(getProfileName(), errorMessage, minorErrorCode);
     }
 }
 
 void CalDavClient::authenticationError()
 {
-    syncFinished(Sync::SYNC_AUTHENTICATION_FAILURE);
+    syncFinished(Buteo::SyncResults::AUTHENTICATION_FAILURE, QStringLiteral("Authentication failed"));
 }
 
 QDateTime CalDavClient::lastSyncTime()
@@ -392,11 +332,35 @@ void CalDavClient::startSlowSync()
         calendar->close();
 
         Report *report = new Report(mNAManager, &mSettings);
+        mRequests.insert(report);
+        connect(report, SIGNAL(finished()), this, SLOT(reportRequestFinished()));
         report->getAllEvents();
-        connect(report, SIGNAL(finished()), this, SLOT(requestFinished()));
-        connect(report, SIGNAL(finished()), report, SLOT(deleteLater()));
-        connect(report, SIGNAL(syncError(Sync::SyncStatus)), this, SLOT(syncFinished(Sync::SyncStatus)));
     }
+}
+
+bool CalDavClient::loadStorageChanges(mKCal::ExtendedStorage::Ptr storage,
+                                      const KDateTime &fromDate,
+                                      KCalCore::Incidence::List *inserted,
+                                      KCalCore::Incidence::List *modified,
+                                      KCalCore::Incidence::List *deleted,
+                                      QString *error)
+{
+    FUNCTION_CALL_TRACE;
+
+    if (!storage->insertedIncidences(inserted, fromDate)) {
+        *error = "mKCal::ExtendedStorage::insertedIncidences() failed";
+        return false;
+    }
+    if (!storage->modifiedIncidences(modified, fromDate)) {
+        *error = "mKCal::ExtendedStorage::modifiedIncidences() failed";
+        return false;
+    }
+    if (!storage->deletedIncidences(deleted, fromDate)) {
+        *error = "mKCal::ExtendedStorage::deletedIncidences() failed";
+        return false;
+    }
+
+    return true;
 }
 
 void CalDavClient::startQuickSync()
@@ -409,72 +373,108 @@ void CalDavClient::startQuickSync()
     storage->open();
     storage->load(QDateTime::currentDateTime().toUTC().addMonths(-6).date(),
                   QDateTime::currentDateTime().toUTC().addMonths(12).date());
-    KCalCore::Incidence::List *list = new KCalCore::Incidence::List();
 
     // we add 2 seconds to ensure that the timestamp doesn't
     // fall prior to when the calendar db commit fs sync finalises.
-    KDateTime date(lastSyncTime().addSecs(2));
+    KDateTime fromDate(lastSyncTime().addSecs(2));
+    LOG_DEBUG("\n\nLAST SYNC TIME = " << fromDate.toString() << "\n\n");
 
-    LOG_DEBUG("\n\n------------------>>>>>>>>>>>>>>>>> LAST SYNC TIME = " << date.toString() << "\n\n\n\n");
-
-    LOG_DEBUG("Inserted incidences:" << storage->insertedIncidences(list, date));
-    LOG_DEBUG("Total Inserted incidences = " << list->count());
-    int count = list->count();
-    for(int index = 0; index < count; index++) {
-        KCalCore::Incidence::Ptr incidence = list->at(index);
-        Put *put = new Put(mNAManager, &mSettings);
-        put->createEvent(incidence);
-        connect(put, SIGNAL(finished()), put, SLOT(deleteLater()));
-        connect(put, SIGNAL(syncError(Sync::SyncStatus)), this, SLOT(syncFinished(Sync::SyncStatus)));
+    KCalCore::Incidence::List inserted;
+    KCalCore::Incidence::List modified;
+    KCalCore::Incidence::List deleted;
+    QString errorString;
+    if (!loadStorageChanges(storage, fromDate, &inserted, &modified, &deleted, &errorString)) {
+        storage->close();
+        calendar->close();
+        syncFinished(Buteo::SyncResults::INTERNAL_ERROR, errorString);
+        return;
     }
-
-    list->clear();
-    LOG_DEBUG("Modified incidences:" << storage->modifiedIncidences(list, date));
-    LOG_DEBUG("Total Modified incidences = " << list->count());
-    count = list->count();
-    for(int index = 0; index < count; index++) {
-        KCalCore::Incidence::Ptr incidence = list->at(index);
-        Put *put = new Put(mNAManager, &mSettings);
-        put->updateEvent(incidence);
-        connect(put, SIGNAL(finished()), put, SLOT(deleteLater()));
-        connect(put, SIGNAL(syncError(Sync::SyncStatus)), this, SLOT(syncFinished(Sync::SyncStatus)));
-    }
-
-    list->clear();
-    LOG_DEBUG("Deleted incidences:" << storage->deletedIncidences(list, date));
-    LOG_DEBUG("Total Deleted incidences = " << list->count());
-    count = list->count();
-    for(int index = 0; index < count; index++) {
-        KCalCore::Incidence::Ptr incidence = list->at(index);
-        Delete *del = new Delete(mNAManager, &mSettings);
-        QString uri = incidence->customProperty("buteo", "uri");
-        LOG_DEBUG("Incidence URI =      " << uri);
-        QString path;
-        if (uri.isEmpty()) {
-            path = incidence->uid();
-            if (!path.isEmpty()) {
-                path += VCalExtension;
-            }
-        } else {
-            path = uri.split("/", QString::SkipEmptyParts).last();
+    LOG_DEBUG("Changes: inserted = " << inserted.count()
+              << "modified = " << modified.count()
+              << "deleted = " << deleted.count());
+    if (inserted.isEmpty() && modified.isEmpty() && deleted.isEmpty()) {
+        // no local changes to send, just do a REPORT to pull updates from server
+        retrieveETags();
+    } else {
+        for (int i=0; i<inserted.count(); i++) {
+            Put *put = new Put(mNAManager, &mSettings);
+            mRequests.insert(put);
+            connect(put, SIGNAL(finished()), this, SLOT(otherRequestFinished()));
+            put->createEvent(inserted[i]);
         }
-        del->deleteEvent(path);
-        connect(del, SIGNAL(finished()), del, SLOT(deleteLater()));
-        connect(del, SIGNAL(syncError(Sync::SyncStatus)), this, SLOT(syncFinished(Sync::SyncStatus)));
+        for (int i=0; i<modified.count(); i++) {
+            Put *put = new Put(mNAManager, &mSettings);
+            mRequests.insert(put);
+            connect(put, SIGNAL(finished()), this, SLOT(otherRequestFinished()));
+            put->updateEvent(modified[i]);
+        }
+        for (int i=0; i<deleted.count(); i++) {
+            Delete *del = new Delete(mNAManager, &mSettings);
+            mRequests.insert(del);
+            connect(del, SIGNAL(finished()), this, SLOT(otherRequestFinished()));
+            del->deleteEvent(deleted[i]);
+        }
     }
     storage->close();
     calendar->close();
-
-    Report *report = new Report(mNAManager, &mSettings);
-    report->getAllETags();
-    connect(report, SIGNAL(finished()), this, SLOT(requestFinished()));
-    connect(report, SIGNAL(finished()), report, SLOT(deleteLater()));
-    connect(report, SIGNAL(syncError(Sync::SyncStatus)), this, SLOT(syncFinished(Sync::SyncStatus)));
 }
 
-void CalDavClient::requestFinished()
+void CalDavClient::otherRequestFinished()
 {
     FUNCTION_CALL_TRACE;
-    LOG_DEBUG("Request finished at" << lastSyncTime());
-    syncFinished(Sync::SYNC_DONE);
+
+    Request *request = qobject_cast<Request*>(sender());
+    if (!request) {
+        syncFinished(Buteo::SyncResults::INTERNAL_ERROR, QStringLiteral("Invalid request object"));
+        return;
+    }
+
+    if (request->errorCode() != Buteo::SyncResults::NO_ERROR) {
+        qWarning() << "Aborting sync," << request->command() << "failed!" << request->errorString();
+        syncFinished(Buteo::SyncResults::INTERNAL_ERROR, request->errorString());
+        return;
+    }
+
+    mRequests.remove(request);
+    request->deleteLater();
+
+    if (mRequests.isEmpty()) {
+        // now we can send a REPORT
+        retrieveETags();
+    }
+}
+
+void CalDavClient::retrieveETags()
+{
+    FUNCTION_CALL_TRACE;
+
+    Report *report = new Report(mNAManager, &mSettings);
+    mRequests.insert(report);
+    connect(report, SIGNAL(finished()), this, SLOT(reportRequestFinished()));
+    report->getAllETags();
+}
+
+void CalDavClient::clearRequests()
+{
+    FUNCTION_CALL_TRACE;
+
+    QList<Request *> requests = mRequests.toList();
+    for (int i=0; i<requests.count(); i++) {
+        requests[i]->deleteLater();
+    }
+    mRequests.clear();
+}
+
+void CalDavClient::reportRequestFinished()
+{
+    Report *request = qobject_cast<Report*>(sender());
+    if (!request) {
+        syncFinished(Buteo::SyncResults::INTERNAL_ERROR, QStringLiteral("Invalid request object"));
+        return;
+    }
+
+    if (request->errorCode() != Buteo::SyncResults::NO_ERROR) {
+        qWarning() << "REPORT request failed!" << request->errorString();
+    }
+    syncFinished(request->errorCode(), request->errorString());
 }

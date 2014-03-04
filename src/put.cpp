@@ -82,8 +82,6 @@ void Put::updateEvent(KCalCore::Incidence::Ptr incidence)
     QNetworkReply *reply = mNAManager->sendCustomRequest(request, REQUEST_TYPE.toLatin1(), buffer);
     debugRequest(request, data);
     connect(reply, SIGNAL(finished()), this, SLOT(requestFinished()));
-    connect(reply, SIGNAL(error(QNetworkReply::NetworkError)),
-            this, SLOT(slotError(QNetworkReply::NetworkError)));
     connect(reply, SIGNAL(sslErrors(QList<QSslError>)),
             this, SLOT(slotSslErrors(QList<QSslError>)));
 }
@@ -120,8 +118,6 @@ void Put::createEvent(KCalCore::Incidence::Ptr incidence)
     QNetworkReply *reply = mNAManager->sendCustomRequest(request, REQUEST_TYPE.toLatin1(), buffer);
     debugRequest(request, ical);
     connect(reply, SIGNAL(finished()), this, SLOT(requestFinished()));
-    connect(reply, SIGNAL(error(QNetworkReply::NetworkError)),
-            this, SLOT(slotError(QNetworkReply::NetworkError)));
     connect(reply, SIGNAL(sslErrors(QList<QSslError>)),
             this, SLOT(slotSslErrors(QList<QSslError>)));
 }
@@ -129,17 +125,19 @@ void Put::createEvent(KCalCore::Incidence::Ptr incidence)
 void Put::requestFinished()
 {
     FUNCTION_CALL_TRACE;
-    QNetworkReply *reply = qobject_cast<QNetworkReply*>(sender());
-    if (!reply) {
-        emit syncError(Sync::SYNC_ERROR);
+
+    if (wasDeleted()) {
+        LOG_DEBUG(command() << "request was aborted");
         return;
     }
-    if (reply->error() != QNetworkReply::NoError) {
-        emit finished();
+
+    QNetworkReply *reply = qobject_cast<QNetworkReply*>(sender());
+    if (!reply) {
+        finishedWithInternalError();
         return;
     }
     debugReplyAndReadAll(reply);
-    reply->deleteLater();
 
-    emit finished();
+    finishedWithReplyResult(reply->error());
+    reply->deleteLater();
 }
