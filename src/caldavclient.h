@@ -86,6 +86,8 @@ private:
                             KCalCore::Incidence::List *modified,
                             KCalCore::Incidence::List *deleted,
                             QString *error);
+    int removeCommonIncidences(KCalCore::Incidence::List *inserted,
+                               KCalCore::Incidence::List *deleted);
 
 
     Buteo::SyncProfile::SyncDirection syncDirection();

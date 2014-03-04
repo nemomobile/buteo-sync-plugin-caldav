@@ -375,7 +375,46 @@ bool CalDavClient::loadStorageChanges(mKCal::ExtendedStorage::Ptr storage,
         return false;
     }
 
+    // If an event has changed to/from the caldav notebook and back since the last sync,
+    // it will be present in both the inserted and deleted lists. In this case, nothing
+    // has actually changed, so remove it from both lists.
+    int removed = removeCommonIncidences(inserted, deleted);
+    if (removed > 0) {
+        LOG_DEBUG("Removed" << removed << "UIDs found in both inserted and removed lists");
+    }
+
     return true;
+}
+
+int CalDavClient::removeCommonIncidences(KCalCore::Incidence::List *firstList, KCalCore::Incidence::List *secondList)
+{
+    QSet<QString> firstListUids;
+    for (int i=0; i<firstList->count(); i++) {
+        firstListUids.insert(firstList->at(i)->uid());
+    }
+    QSet<QString> commonUids;
+    for (KCalCore::Incidence::List::iterator it = secondList->begin(); it != secondList->end();) {
+        KCalCore::Incidence::Ptr incidence = *it;
+        if (firstListUids.contains(incidence->uid())) {
+            commonUids.insert(incidence->uid());
+            it = secondList->erase(it);
+        } else {
+            ++it;
+        }
+    }
+    int removed = commonUids.count();
+    if (removed > 0) {
+        for (KCalCore::Incidence::List::iterator it = firstList->begin(); it != firstList->end();) {
+            KCalCore::Incidence::Ptr incidence = *it;
+            if (commonUids.contains(incidence->uid())) {
+                commonUids.remove(incidence->uid());
+                it = firstList->erase(it);
+            } else {
+                ++it;
+            }
+        }
+    }
+    return removed;
 }
 
 void CalDavClient::startQuickSync()
