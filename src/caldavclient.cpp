@@ -21,6 +21,8 @@
  *
  */
 
+#define BUTEO_ENABLE_DEBUG
+
 #include "caldavclient.h"
 #include "report.h"
 #include "put.h"
@@ -195,7 +197,7 @@ bool CalDavClient::cleanUp()
     calendar->close();
 
     if (nbUid.isNull() || nbUid.isEmpty()) {
-        syncFinished(Buteo::SyncResults::DATABASE_FAILURE, QStringLiteral("Cannot find notebook UID, cannot save any events"));
+        syncFinished(Buteo::SyncResults::INTERNAL_ERROR, QStringLiteral("Cannot find notebook UID, cannot save any events"));
         return false;
     }
 
@@ -453,19 +455,19 @@ void CalDavClient::startQuickSync()
         for (int i=0; i<inserted.count(); i++) {
             Put *put = new Put(mNAManager, &mSettings);
             mRequests.insert(put);
-            connect(put, SIGNAL(finished()), this, SLOT(otherRequestFinished()));
+            connect(put, SIGNAL(finished()), this, SLOT(nonReportRequestFinished()));
             put->createEvent(inserted[i]);
         }
         for (int i=0; i<modified.count(); i++) {
             Put *put = new Put(mNAManager, &mSettings);
             mRequests.insert(put);
-            connect(put, SIGNAL(finished()), this, SLOT(otherRequestFinished()));
+            connect(put, SIGNAL(finished()), this, SLOT(nonReportRequestFinished()));
             put->updateEvent(modified[i]);
         }
         for (int i=0; i<deleted.count(); i++) {
             Delete *del = new Delete(mNAManager, &mSettings);
             mRequests.insert(del);
-            connect(del, SIGNAL(finished()), this, SLOT(otherRequestFinished()));
+            connect(del, SIGNAL(finished()), this, SLOT(nonReportRequestFinished()));
             del->deleteEvent(deleted[i]);
         }
     }
@@ -473,7 +475,7 @@ void CalDavClient::startQuickSync()
     calendar->close();
 }
 
-void CalDavClient::otherRequestFinished()
+void CalDavClient::nonReportRequestFinished()
 {
     FUNCTION_CALL_TRACE;
 

@@ -67,7 +67,7 @@ private Q_SLOTS:
     bool start();
     void authenticationError();
     void reportRequestFinished();
-    void otherRequestFinished();
+    void nonReportRequestFinished();
 
 private:
     void startSlowSync();
