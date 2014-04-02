@@ -35,7 +35,7 @@ Delete::Delete(QNetworkAccessManager *manager, Settings *settings, QObject *pare
     FUNCTION_CALL_TRACE;
 }
 
-void Delete::deleteEvent(KCalCore::Incidence::Ptr incidence)
+void Delete::deleteEvent(const QString &serverPath, KCalCore::Incidence::Ptr incidence)
 {
     FUNCTION_CALL_TRACE;
 
@@ -45,18 +45,8 @@ void Delete::deleteEvent(KCalCore::Incidence::Ptr incidence)
                           QString("DELETE not sent, cannot get uri for incidence %1").arg(incidence->uid()));
         return;
     }
-
     QNetworkRequest request;
-    QUrl url(mSettings->url() + uri);
-    if (!mSettings->authToken().isEmpty()) {
-        request.setRawHeader(QString("Authorization").toLatin1(),
-                             QString("Bearer " + mSettings->authToken()).toLatin1());
-    } else {
-        url.setUserName(mSettings->username());
-        url.setPassword(mSettings->password());
-    }
-
-    request.setUrl(url);
+    prepareRequest(&request, serverPath + uri);
     QNetworkReply *reply = mNAManager->sendCustomRequest(request, REQUEST_TYPE.toLatin1());
     debugRequest(request, QStringLiteral(""));
     connect(reply, SIGNAL(finished()), this, SLOT(requestFinished()));

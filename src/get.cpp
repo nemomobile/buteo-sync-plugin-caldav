@@ -15,19 +15,10 @@ Get::Get(QNetworkAccessManager *manager, Settings *settings, QObject *parent)
 {
 }
 
-void Get::getEvent(const QString &u)
+void Get::getEvent(const QString &serverPath, const QString &uid)
 {
     QNetworkRequest request;
-
-    QUrl url(u);
-    if (!mSettings->authToken().isEmpty()) {
-        request.setRawHeader(QString("Authorization").toLatin1(),
-                             QString("Bearer " + mSettings->authToken()).toLatin1());
-    } else {
-        url.setUserName(mSettings->username());
-        url.setPassword(mSettings->password());
-    }
-    request.setUrl(url);
+    prepareRequest(&request, serverPath + uid);
     QNetworkReply *reply = mNAManager->get(request);
     debugRequest(request, QStringLiteral(""));
     connect(reply, SIGNAL(finished()), this, SLOT(requestFinished()));

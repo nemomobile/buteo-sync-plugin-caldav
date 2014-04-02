@@ -56,11 +56,10 @@ const QString AUTH                  ("auth");
 const QString AUTH_METHOD           ("method");
 const QString MECHANISM             ("mechanism");
 
-AuthHandler::AuthHandler(Accounts::Manager *manager, const quint32 accountId, const QString &accountService, const QString &remoteDatabasePath, QObject *parent)
+AuthHandler::AuthHandler(Accounts::Manager *manager, const quint32 accountId, const QString &accountService, QObject *parent)
     : QObject(parent)
     , mAccountManager(manager)
-    , mAccount (manager->account(accountId))
-    , mRemoteDatabasePath(remoteDatabasePath)
+    , mAccount(manager->account(accountId))
     , m_accountService(accountService)
 {
 }

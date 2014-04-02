@@ -30,6 +30,12 @@
 class Settings
 {
 public:
+    struct CalendarInfo {
+        QString serverPath;
+        QString displayName;
+        QString color;
+    };
+
     Settings();
 
     QString authToken() const;
@@ -42,23 +48,27 @@ public:
     QString password() const;
 
     void setIgnoreSSLErrors(bool ignore);
-    bool ignoreSSLErrors();
-
-    void setUrl(const QString &url);
-    QUrl makeUrl();
-    QString url();
+    bool ignoreSSLErrors() const;
 
     void setAccountId(quint32 accountId);
-    quint32 accountId();
+    quint32 accountId() const;
+
+    void setServerAddress(const QString &serverAddress);
+    QString serverAddress() const;
+
+    void setCalendars(const QList<CalendarInfo> &calendars);
+    QList<CalendarInfo> calendars() const;
+
+    QString notebookId(const QString &calendarServerPath) const;
 
 private:
-    QString     mOAuthToken;
-    QString     mUsername;
-    QString     mPassword;
-    QString     mUrlString;
-    QUrl        mUrl;
-    quint32     mAccountId;
-    bool        mIgnoreSSLErrors;
+    QList<CalendarInfo> mCalendars;
+    QString mServerAddress;
+    QString mOAuthToken;
+    QString mUsername;
+    QString mPassword;
+    quint32 mAccountId;
+    bool mIgnoreSSLErrors;
 };
 
 #endif // SETTINGS_H

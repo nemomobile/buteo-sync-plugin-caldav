@@ -56,11 +56,13 @@ protected Q_SLOTS:
     virtual void slotSslErrors(QList<QSslError>);
 
 protected:
+    void prepareRequest(QNetworkRequest *request, const QString &requestPath);
+
     bool wasDeleted() const;
 
     void finishedWithSuccess();
     void finishedWithError(int minorCode, const QString &errorString);
-    void finishedWithInternalError();
+    void finishedWithInternalError(const QString &errorString = QString());
     void finishedWithReplyResult(QNetworkReply::NetworkError error);
 
     void debugRequest(const QNetworkRequest &request, const QByteArray &data);

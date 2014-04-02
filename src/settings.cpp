@@ -69,28 +69,37 @@ void Settings::setUsername(const QString & username)
     mUsername = username;
 }
 
-void Settings::setUrl(const QString & url)
-{
-    mUrlString = url;
-    mUrl.setUrl(url);
-}
-
-QString Settings::url()
-{
-    return mUrlString;
-}
-
-QUrl Settings::makeUrl()
-{
-    return mUrl;
-}
-
 void Settings::setAccountId(quint32 accountId)
 {
     mAccountId = accountId;
 }
 
-quint32 Settings::accountId()
+quint32 Settings::accountId() const
 {
     return mAccountId;
+}
+
+void Settings::setServerAddress(const QString &serverAddress)
+{
+    mServerAddress = serverAddress;
+}
+
+QString Settings::serverAddress() const
+{
+    return mServerAddress;
+}
+
+void Settings::setCalendars(const QList<CalendarInfo> &calendars)
+{
+    mCalendars = calendars;
+}
+
+QList<Settings::CalendarInfo> Settings::calendars() const
+{
+    return mCalendars;
+}
+
+QString Settings::notebookId(const QString &calendarServerPath) const
+{
+    return QString::number(mAccountId) + "-" + calendarServerPath;
 }
