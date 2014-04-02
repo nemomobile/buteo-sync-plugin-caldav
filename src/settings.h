@@ -32,14 +32,14 @@ class Settings
 public:
     Settings();
 
-    QString authToken();
+    QString authToken() const;
     void setAuthToken(const QString &token);
 
     void setUsername(const QString &username);
-    QString username();
+    QString username() const;
 
     void setPassword(const QString &password);
-    QString password();
+    QString password() const;
 
     void setIgnoreSSLErrors(bool ignore);
     bool ignoreSSLErrors();

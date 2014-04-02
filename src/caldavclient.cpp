@@ -263,22 +263,24 @@ bool CalDavClient::initConfig()
     return true;
 }
 
-void CalDavClient::syncFinished(int minorErrorCode, const QString &errorMessage)
+void CalDavClient::syncFinished(int minorErrorCode, const QString &message)
 {
     FUNCTION_CALL_TRACE;
 
     clearRequests();
 
     if (minorErrorCode == Buteo::SyncResults::NO_ERROR) {
+        LOG_DEBUG("CalDAV sync succeeded!" << message);
         mResults = Buteo::SyncResults(QDateTime::currentDateTime().toUTC(),
                                       Buteo::SyncResults::SYNC_RESULT_SUCCESS,
                                       Buteo::SyncResults::NO_ERROR);
-        emit success(getProfileName(), QString());
+        emit success(getProfileName(), message);
     } else {
+        LOG_CRITICAL("CalDAV sync failed:" << minorErrorCode << message);
         mResults = Buteo::SyncResults(QDateTime::currentDateTime().toUTC(),
                                       Buteo::SyncResults::SYNC_RESULT_FAILED,
                                       minorErrorCode);
-        emit error(getProfileName(), errorMessage, minorErrorCode);
+        emit error(getProfileName(), message, minorErrorCode);
     }
 }
 

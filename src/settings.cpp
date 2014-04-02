@@ -29,7 +29,7 @@ Settings::Settings()
 {
 }
 
-QString Settings::authToken()
+QString Settings::authToken() const
 {
     return mOAuthToken;
 }
@@ -39,7 +39,7 @@ void Settings::setAuthToken(const QString & token)
     mOAuthToken = token;
 }
 
-bool Settings::ignoreSSLErrors()
+bool Settings::ignoreSSLErrors() const
 {
     return mIgnoreSSLErrors;
 }
@@ -49,7 +49,7 @@ void Settings::setIgnoreSSLErrors(bool ignore)
     mIgnoreSSLErrors = ignore;
 }
 
-QString Settings::password()
+QString Settings::password() const
 {
     return mPassword;
 }
@@ -59,7 +59,7 @@ void Settings::setPassword(const QString & password)
     mPassword = password;
 }
 
-QString Settings::username()
+QString Settings::username() const
 {
     return mUsername;
 }
