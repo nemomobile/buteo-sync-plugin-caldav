@@ -179,7 +179,7 @@ bool CalDavClient::cleanUp()
     QString notebookAccountPrefix = accountIdString + "-";
 
     mKCal::ExtendedCalendar::Ptr calendar = mKCal::ExtendedCalendar::Ptr(new mKCal::ExtendedCalendar(KDateTime::Spec::UTC()));
-    mKCal::ExtendedStorage::Ptr storage = calendar->defaultStorage(calendar);
+    mKCal::ExtendedStorage::Ptr storage = mKCal::ExtendedCalendar::defaultStorage(calendar);
     if (!storage->open()) {
         calendar->close();
         LOG_CRITICAL("unable to open calendar storage");
@@ -314,6 +314,12 @@ void CalDavClient::syncFinished(int minorErrorCode, const QString &message)
     FUNCTION_CALL_TRACE;
 
     clearRequests();
+    if (mCalendar) {
+        mCalendar->close();
+    }
+    if (mStorage) {
+        mStorage->close();
+    }
 
     if (minorErrorCode == Buteo::SyncResults::NO_ERROR) {
         LOG_DEBUG("CalDAV sync succeeded!" << message);
@@ -368,10 +374,9 @@ void CalDavClient::startSlowSync()
         syncFinished(Buteo::SyncResults::NO_ERROR, "No calendars for this account");
         return;
     }
-    mKCal::ExtendedCalendar::Ptr calendar = mKCal::ExtendedCalendar::Ptr(new mKCal::ExtendedCalendar(KDateTime::Spec::UTC()));
-    mKCal::ExtendedStorage::Ptr storage = calendar->defaultStorage(calendar);
-    if (!storage->open()) {
-        calendar->close();
+    mCalendar = mKCal::ExtendedCalendar::Ptr(new mKCal::ExtendedCalendar(KDateTime::Spec::UTC()));
+    mStorage = mKCal::ExtendedCalendar::defaultStorage(mCalendar);
+    if (!mStorage->open()) {
         syncFinished(Buteo::SyncResults::DATABASE_FAILURE, "unable to open calendar storage");
         return;
     }
@@ -381,18 +386,12 @@ void CalDavClient::startSlowSync()
         notebook->setPluginName(getPluginName());
         notebook->setSyncProfile(getProfileName());
         notebook->setColor(calendarInfo.color);
-        if (!storage->addNotebook(notebook)) {
-            storage->close();
-            calendar->close();
+        if (!mStorage->addNotebook(notebook)) {
             syncFinished(Buteo::SyncResults::INTERNAL_ERROR, "unable to add notebook " + notebook->uid() + " for account/calendar " + notebook->account());
             return;
         }
         LOG_DEBUG("NOTEBOOK created" << notebook->uid() << "account:" << notebook->account());
     }
-
-    mCalendar = calendar;
-    mStorage = storage;
-
     Q_FOREACH (const Settings::CalendarInfo &calendarInfo, allCalendarInfo) {
         Report *report = new Report(mNAManager, &mSettings, mCalendar, mStorage, this);
         mRequests.insert(report);
@@ -401,8 +400,7 @@ void CalDavClient::startSlowSync()
     }
 }
 
-bool CalDavClient::loadStorageChanges(mKCal::ExtendedStorage::Ptr storage,
-                                      const QString &notebookUid,
+bool CalDavClient::loadStorageChanges(const QString &notebookUid,
                                       const KDateTime &fromDate,
                                       KCalCore::Incidence::List *inserted,
                                       KCalCore::Incidence::List *modified,
@@ -411,15 +409,20 @@ bool CalDavClient::loadStorageChanges(mKCal::ExtendedStorage::Ptr storage,
 {
     FUNCTION_CALL_TRACE;
 
-    if (!storage->insertedIncidences(inserted, fromDate, notebookUid)) {
+    if (!mStorage) {
+        *error = "mStorage not defined";
+        return false;
+    }
+
+    if (!mStorage->insertedIncidences(inserted, fromDate, notebookUid)) {
         *error = "mKCal::ExtendedStorage::insertedIncidences() failed";
         return false;
     }
-    if (!storage->modifiedIncidences(modified, fromDate, notebookUid)) {
+    if (!mStorage->modifiedIncidences(modified, fromDate, notebookUid)) {
         *error = "mKCal::ExtendedStorage::modifiedIncidences() failed";
         return false;
     }
-    if (!storage->deletedIncidences(deleted, fromDate, notebookUid)) {
+    if (!mStorage->deletedIncidences(deleted, fromDate, notebookUid)) {
         *error = "mKCal::ExtendedStorage::deletedIncidences() failed";
         return false;
     }
@@ -475,34 +478,36 @@ void CalDavClient::startQuickSync()
         syncFinished(Buteo::SyncResults::NO_ERROR, "No calendars for this account");
         return;
     }
-    mKCal::ExtendedCalendar::Ptr calendar = mKCal::ExtendedCalendar::Ptr(new mKCal::ExtendedCalendar(KDateTime::Spec::UTC()));
-    mKCal::ExtendedStorage::Ptr storage = calendar->defaultStorage(calendar);
-    if (!storage->open()) {
+    mCalendar = mKCal::ExtendedCalendar::Ptr(new mKCal::ExtendedCalendar(KDateTime::Spec::UTC()));
+    mStorage = mKCal::ExtendedCalendar::defaultStorage(mCalendar);
+    if (!mStorage->open()) {
         syncFinished(Buteo::SyncResults::DATABASE_FAILURE, "unable to open calendar storage");
         return;
     }
-    if (!storage->load(QDateTime::currentDateTime().toUTC().addMonths(-6).date(),
+    if (!mStorage->load(QDateTime::currentDateTime().toUTC().addMonths(-6).date(),
                       QDateTime::currentDateTime().toUTC().addMonths(12).date())) {
-        storage->close();
         syncFinished(Buteo::SyncResults::DATABASE_FAILURE, "unable to load calendar storage");
         return;
     }
-    mCalendar = calendar;
-    mStorage = storage;
-    mKCal::Notebook::List notebookList = storage->notebooks();
+    mKCal::Notebook::List notebookList = mStorage->notebooks();
     Q_FOREACH (mKCal::Notebook::Ptr notebook, notebookList) {
         Q_FOREACH (const Settings::CalendarInfo &calendarInfo, allCalendarInfo) {
             if (notebook->account() == mSettings.notebookId(calendarInfo.serverPath)) {
-                syncNotebookChanges(storage, notebook, calendarInfo.serverPath);
+                syncNotebookChanges(notebook, calendarInfo.serverPath);
                 break;
             }
         }
     }
 }
 
-void CalDavClient::syncNotebookChanges(mKCal::ExtendedStorage::Ptr storage, mKCal::Notebook::Ptr notebook, const QString &serverPath)
+void CalDavClient::syncNotebookChanges(mKCal::Notebook::Ptr notebook, const QString &serverPath)
 {
     FUNCTION_CALL_TRACE;
+
+    if (!mStorage) {
+        syncFinished(Buteo::SyncResults::INTERNAL_ERROR, "mStorage not set");
+        return;
+    }
 
     // we add 2 seconds to ensure that the timestamp doesn't
     // fall prior to when the calendar db commit fs sync finalises.
@@ -513,7 +518,7 @@ void CalDavClient::syncNotebookChanges(mKCal::ExtendedStorage::Ptr storage, mKCa
     KCalCore::Incidence::List modified;
     KCalCore::Incidence::List deleted;
     QString errorString;
-    if (!loadStorageChanges(storage, notebook->uid(), fromDate, &inserted, &modified, &deleted, &errorString)) {
+    if (!loadStorageChanges(notebook->uid(), fromDate, &inserted, &modified, &deleted, &errorString)) {
         LOG_WARNING("Unable to load changes for calendar:" << serverPath);
         syncFinished(Buteo::SyncResults::INTERNAL_ERROR, errorString);
         return;
@@ -657,8 +662,6 @@ void CalDavClient::reportRequestFinished()
         mIncidencesToDelete.clear();
 
         bool saved = mStorage->save();
-        mStorage->close();
-        mCalendar->close();
         if (saved) {
             syncFinished(request->errorCode(), request->errorString());
         } else {

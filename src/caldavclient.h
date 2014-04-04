@@ -150,11 +150,9 @@ private:
     void retrieveETags(const QString &serverPath);
     QList<Settings::CalendarInfo> loadCalendars(Accounts::Account *account, Accounts::Service srv) const;
 
-    void syncNotebookChanges(mKCal::ExtendedStorage::Ptr storage,
-                             mKCal::Notebook::Ptr notebook,
+    void syncNotebookChanges(mKCal::Notebook::Ptr notebook,
                              const QString &serverPath);
-    bool loadStorageChanges(mKCal::ExtendedStorage::Ptr storage,
-                            const QString &notebookUid,
+    bool loadStorageChanges(const QString &notebookUid,
                             const KDateTime &fromDate,
                             KCalCore::Incidence::List *inserted,
                             KCalCore::Incidence::List *modified,

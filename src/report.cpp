@@ -193,22 +193,25 @@ void Report::processEvents()
         reader.read(data);
         LOG_DEBUG("Total content length of the data = " << data.length());
         LOG_DEBUG(data);
-        QHash<QString, CDItem*> map = reader.getIncidenceMap();
+        const QHash<QString, Reader::CalendarResource> &map = reader.results();
         QString nbUid = mNotebook->uid();
         KCalCore::Event::Ptr event ;
         KCalCore::Todo::Ptr todo ;
         KCalCore::Journal::Ptr journal ;
         KCalCore::Event::Ptr origEvent ;
         KCalCore::Todo::Ptr origTodo ;
-        QHash<QString, CDItem*>::const_iterator iter = map.constBegin();
-        while(iter != map.constEnd()) {
-            CDItem *item = iter.value();
+        QHash<QString, Reader::CalendarResource>::const_iterator iter = map.constBegin();
+        while (iter != map.constEnd()) {
+            const Reader::CalendarResource &resource = *iter;
+            KCalCore::ICalFormat iCalFormat;
+            KCalCore::Incidence::Ptr incidence = iCalFormat.fromString(resource.iCalData);
             ++iter;
-            if (item->incidencePtr().isNull()) continue;
-
-            switch(item->incidencePtr()->type()) {
+            if (incidence.isNull()) {
+                continue;
+            }
+            switch (incidence->type()) {
                 case KCalCore::IncidenceBase::TypeEvent:
-                    event = item->incidencePtr().staticCast<KCalCore::Event>();
+                    event = incidence.staticCast<KCalCore::Event>();
                     origEvent = mCalendar->event(event->uid());
                     LOG_DEBUG("UID of the event = " << event->uid());
                     //If Event is already added to Calendar, then update its property
@@ -217,8 +220,8 @@ void Report::processEvents()
                         origEvent->setLocation(event->location());
                         origEvent->setSummary(event->summary());
                         origEvent->setDescription(event->description());
-                        origEvent->setCustomProperty("buteo", "etag", item->etag());
-                        origEvent->setCustomProperty("buteo", "uri", item->href());
+                        origEvent->setCustomProperty("buteo", "etag", resource.etag);
+                        origEvent->setCustomProperty("buteo", "uri", resource.href);
                         origEvent->setHasDuration(event->hasDuration());
                         origEvent->setDuration(event->duration());
                         origEvent->setLastModified(event->lastModified());
@@ -236,15 +239,15 @@ void Report::processEvents()
                         }
                         origEvent->endUpdates();
                     } else {
-                        event->setCustomProperty("buteo", "uri", item->href());
-                        event->setCustomProperty("buteo", "etag", item->etag());
+                        event->setCustomProperty("buteo", "uri", resource.href);
+                        event->setCustomProperty("buteo", "etag", resource.etag);
                         if (!mCalendar->addEvent(event, nbUid)) {
                             LOG_WARNING("Unable to add event" << event->uid() << "to notebook" << nbUid);
                         }
                     }
                     break;
                 case KCalCore::IncidenceBase::TypeTodo:
-                    todo = item->incidencePtr().staticCast<KCalCore::Todo>();
+                    todo = incidence.staticCast<KCalCore::Todo>();
                     origTodo = mCalendar->todo(todo->uid());
                     //If Event is already added to Calendar, then update its property
                     if (origTodo != NULL) {
@@ -252,8 +255,8 @@ void Report::processEvents()
                         origTodo->setLocation(todo->location());
                         origTodo->setSummary(todo->summary());
                         origTodo->setDescription(todo->description());
-                        origTodo->setCustomProperty("buteo", "etag", item->etag());
-                        origTodo->setCustomProperty("buteo", "uri", item->href());
+                        origTodo->setCustomProperty("buteo", "etag", resource.etag);
+                        origTodo->setCustomProperty("buteo", "uri", resource.href);
                         origTodo->setLastModified(todo->lastModified());
                         origTodo->setOrganizer(todo->organizer());
                         origTodo->setReadOnly(todo->isReadOnly());
@@ -261,17 +264,17 @@ void Report::processEvents()
                         origTodo->setSecrecy(todo->secrecy());
                         origTodo->endUpdates();
                     } else {
-                        todo->setCustomProperty("buteo", "uri", item->href());
-                        todo->setCustomProperty("buteo", "etag", item->etag());
+                        todo->setCustomProperty("buteo", "uri", resource.href);
+                        todo->setCustomProperty("buteo", "etag", resource.etag);
                         if (!mCalendar->addTodo(todo, nbUid)) {
                             LOG_WARNING("Unable to add todo" << todo->uid() << "to notebook" << nbUid);
                         }
                     }
                     break;
                 case KCalCore::IncidenceBase::TypeJournal:
-                    journal = item->incidencePtr().staticCast<KCalCore::Journal>();
-                    journal->setCustomProperty("buteo", "uri", item->href());
-                    journal->setCustomProperty("buteo", "etag", item->etag());
+                    journal = incidence.staticCast<KCalCore::Journal>();
+                    journal->setCustomProperty("buteo", "uri", resource.href);
+                    journal->setCustomProperty("buteo", "etag", resource.etag);
                     if (!mCalendar->addJournal(journal, nbUid)) {
                         LOG_WARNING("Unable to add event" << journal->uid() << "to notebook" << nbUid);
                     }
@@ -320,7 +323,7 @@ void Report::processETags()
         Reader reader;
         reader.read(data);
         LOG_DEBUG("Total content length of the data = " << data.length());
-        QHash<QString, CDItem*> map = reader.getIncidenceMap();
+        QHash<QString, Reader::CalendarResource> map = reader.results();
         QStringList eventIdList;
 
         // Incidences must be loaded with ExtendedStorage::allIncidences() rather than
@@ -340,8 +343,8 @@ void Report::processETags()
                 //Newly added to Local DB -- Skip this incidence
                 continue;
             }
-            CDItem *item = map.take(uri);
-            if (item == 0) {
+            if (!map.contains(uri)) {
+                // we have an incidence that's not on the remote server, so delete it
                 switch (incidence->type()) {
                 case KCalCore::IncidenceBase::TypeEvent:
                 case KCalCore::IncidenceBase::TypeTodo:
@@ -354,13 +357,15 @@ void Report::processETags()
                 }
                 continue;
             } else {
-                if (incidence->customProperty("buteo", "etag") != item->etag()) {
-                    eventIdList.append(item->href());
+                Reader::CalendarResource resource = map.take(uri);
+                if (incidence->customProperty("buteo", "etag") != resource.etag) {
+                    eventIdList.append(resource.href);
                 }
             }
         }
         eventIdList.append(map.keys());
         if (!eventIdList.isEmpty()) {
+            // some incidences have changed on the server, so fetch the new details
             multiGetEvents(mServerPath, eventIdList, true);
         } else {
             finishedWithSuccess();
@@ -389,35 +394,37 @@ void Report::updateETags()
         Reader reader;
         reader.read(data);
         LOG_DEBUG("Total content length of the data = " << data.length());
-        QHash<QString, CDItem*> map = reader.getIncidenceMap();
+        const QHash<QString, Reader::CalendarResource> &map = reader.results();
         KCalCore::Event::Ptr event;
         KCalCore::Todo::Ptr todo;
         KCalCore::Journal::Ptr journal;
-        QHash<QString, CDItem*>::const_iterator iter = map.constBegin();
-        while(iter != map.constEnd()) {
-            CDItem *item = iter.value();
-            QString uid = item->incidencePtr()->uid();
-            LOG_DEBUG("UID to be updated = " << uid << "     ETAG = " << item->etag());
+        QHash<QString, Reader::CalendarResource>::const_iterator iter = map.constBegin();
+        while (iter != map.constEnd()) {
+            const Reader::CalendarResource &resource = *iter;
+            KCalCore::ICalFormat iCalFormat;
+            KCalCore::Incidence::Ptr incidence = iCalFormat.fromString(resource.iCalData);
+            QString uid = incidence->uid();
+            LOG_DEBUG("UID to be updated = " << uid << "     ETAG = " << resource.etag);
             ++iter;
             event = mCalendar->event(uid);
             if (!event.isNull()) {
                 event->startUpdates();
-                event->setCustomProperty("buteo", "etag", item->etag());
+                event->setCustomProperty("buteo", "etag", resource.etag);
                 event->endUpdates();
-                LOG_DEBUG("ETAG was updated = " << item->etag());
+                LOG_DEBUG("ETAG was updated = " << resource.etag);
                 continue;
             }
             todo = mCalendar->todo(uid);
             if (!todo.isNull()) {
                 todo->startUpdates();
-                todo->setCustomProperty("buteo", "etag", item->etag());
+                todo->setCustomProperty("buteo", "etag", resource.etag);
                 todo->endUpdates();
                 continue;
             }
             journal = mCalendar->journal(uid);
             if (!journal.isNull()) {
                 journal->startUpdates();
-                journal->setCustomProperty("buteo", "etag", item->etag());
+                journal->setCustomProperty("buteo", "etag", resource.etag);
                 journal->endUpdates();
                 continue;
             }

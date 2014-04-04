@@ -25,36 +25,36 @@
 #define READER_H
 
 #include <QObject>
-
-#include <QXmlStreamReader>
 #include <QHash>
 
-#include "cditem.h"
+class QXmlStreamReader;
 
 class Reader : public QObject
 {
     Q_OBJECT
-
 public:
+    struct CalendarResource {
+        QString href;
+        QString etag;
+        QString status;
+        QString iCalData;
+    };
+
     explicit Reader(QObject *parent = 0);
     ~Reader();
 
     void read(const QByteArray &data);
-    QHash<QString, CDItem *> getIncidenceMap();
+    const QHash<QString, CalendarResource>& results() const;
 
 private:
     void readMultiStatus();
     void readResponse();
-    void readHref(CDItem *item);
-    void readPropStat(CDItem *item);
-    void readProp(CDItem *item);
-    void readStatus(CDItem *item);
-    void readGetETag(CDItem *item);
-    void readCalendarData(CDItem *item);
+    void readPropStat(CalendarResource *resource);
+    void readProp(CalendarResource *resource);
 
 private:
     QXmlStreamReader *mReader;
-    QHash<QString, CDItem*> mIncidenceMap;
+    QHash<QString, CalendarResource> mResults;
 };
 
 #endif // READER_H
