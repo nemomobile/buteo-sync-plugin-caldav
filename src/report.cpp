@@ -43,26 +43,48 @@
 #include <extendedstorage.h>
 #include <notebook.h>
 
-Report::Report(QNetworkAccessManager *manager, Settings *settings, QObject *parent)
+Report::Report(QNetworkAccessManager *manager, Settings *settings, mKCal::ExtendedCalendar::Ptr calendar, mKCal::ExtendedStorage::Ptr storage, QObject *parent)
     : Request(manager, settings, "REPORT", parent)
+    , mCalendar(calendar)
+    , mStorage(storage)
 {
     FUNCTION_CALL_TRACE;
 }
 
-void Report::getAllEvents()
+bool Report::initRequest(const QString &serverPath)
+{
+    if (!mStorage || !mCalendar) {
+        finishedWithInternalError("calendar or storage not specified");
+        return false;
+    }
+    mKCal::Notebook::Ptr notebook;
+    QString notebookId = mSettings->notebookId(serverPath);
+    mKCal::Notebook::List notebookList = mStorage->notebooks();
+    LOG_DEBUG("Total Number of Notebooks in device = " << notebookList.count());
+    Q_FOREACH (mKCal::Notebook::Ptr nbPtr, notebookList) {
+        LOG_DEBUG(nbPtr->uid() << "     Notebook's' Account ID " << nbPtr->account() << " Looking for Account ID = " << notebookId);
+        if (nbPtr->account() == notebookId) {
+            notebook = nbPtr;
+            break;
+        }
+    }
+    if (!notebook) {
+        finishedWithError(Buteo::SyncResults::DATABASE_FAILURE, QStringLiteral("Cannot find notebook UID, cannot save any events"));
+        return false;
+    }
+    mNotebook = notebook;
+    return true;
+}
+
+void Report::getAllEvents(const QString &serverPath)
 {
     FUNCTION_CALL_TRACE;
-
-    QNetworkRequest request;
-    QUrl url(mSettings->url());
-    if (!mSettings->authToken().isEmpty()) {
-        request.setRawHeader(QString("Authorization").toLatin1(), QString("Bearer " + mSettings->authToken()).toLatin1());
-    } else {
-        url.setUserName(mSettings->username());
-        url.setPassword(mSettings->password());
+    if (!initRequest(serverPath)) {
+        return;
     }
-    request.setUrl(url);
-
+    mServerPath = serverPath;
+    QNetworkRequest request;
+    prepareRequest(&request, serverPath);
     request.setRawHeader("Depth", "1");
     request.setRawHeader("Prefer", "return-minimal");
     request.setHeader(QNetworkRequest::ContentTypeHeader, "application/xml; charset=utf-8");
@@ -79,19 +101,15 @@ void Report::getAllEvents()
             this, SLOT(slotSslErrors(QList<QSslError>)));
 }
 
-void Report::getAllETags()
+void Report::getAllETags(const QString &serverPath)
 {
     FUNCTION_CALL_TRACE;
-
-    QNetworkRequest request;
-    QUrl url(mSettings->url());
-    if (!mSettings->authToken().isEmpty()) {
-        request.setRawHeader(QString("Authorization").toLatin1(), QString("Bearer " + mSettings->authToken()).toLatin1());
-    } else {
-        url.setUserName(mSettings->username());
-        url.setPassword(mSettings->password());
+    if (!initRequest(serverPath)) {
+        return;
     }
-    request.setUrl(url);
+    mServerPath = serverPath;
+    QNetworkRequest request;
+    prepareRequest(&request, serverPath);
     request.setRawHeader("Depth", "1");
     request.setRawHeader("Prefer", "return-minimal");
     request.setHeader(QNetworkRequest::ContentTypeHeader, "application/xml; charset=utf-8");
@@ -110,21 +128,15 @@ void Report::getAllETags()
             this, SLOT(slotSslErrors(QList<QSslError>)));
 }
 
-void Report::multiGetEvents(const QStringList &eventIdList, bool includeCalendarData)
+void Report::multiGetEvents(const QString &serverPath, const QStringList &eventIdList, bool includeCalendarData)
 {
     FUNCTION_CALL_TRACE;
 
-    if (eventIdList.isEmpty()) return;
-
-    QNetworkRequest request;
-    QUrl url(mSettings->url());
-    if (!mSettings->authToken().isEmpty()) {
-        request.setRawHeader(QString("Authorization").toLatin1(), QString("Bearer " + mSettings->authToken()).toLatin1());
-    } else {
-        url.setUserName(mSettings->username());
-        url.setPassword(mSettings->password());
+    if (eventIdList.isEmpty()) {
+        return;
     }
-    request.setUrl(url);
+    QNetworkRequest request;
+    prepareRequest(&request, serverPath);
     request.setRawHeader("Depth", "1");
     request.setRawHeader("Prefer", "return-minimal");
     request.setHeader(QNetworkRequest::ContentTypeHeader, "application/xml; charset=utf-8");
@@ -134,7 +146,6 @@ void Report::multiGetEvents(const QStringList &eventIdList, bool includeCalendar
     if (includeCalendarData) {
         multiGetRequest.append("<c:calendar-data />");
     }
-
     multiGetRequest.append("</d:prop>");
 
     Q_FOREACH (const QString &eventId , eventIdList) {
@@ -165,7 +176,6 @@ void Report::processEvents()
         LOG_DEBUG(command() << "request was aborted");
         return;
     }
-
     QNetworkReply *reply = qobject_cast<QNetworkReply*>(sender());
     if (!reply) {
         finishedWithInternalError();
@@ -184,24 +194,7 @@ void Report::processEvents()
         LOG_DEBUG("Total content length of the data = " << data.length());
         LOG_DEBUG(data);
         QHash<QString, CDItem*> map = reader.getIncidenceMap();
-        mKCal::ExtendedCalendar::Ptr calendar = mKCal::ExtendedCalendar::Ptr(new mKCal::ExtendedCalendar(KDateTime::Spec::UTC()));
-        mKCal::ExtendedStorage::Ptr storage = calendar->defaultStorage(calendar);
-        storage->open();
-        QString aId = QString::number(mSettings->accountId());
-        QString nbUid;
-        mKCal::Notebook::List notebookList = storage->notebooks();
-        LOG_DEBUG("Total Number of Notebooks in device = " << notebookList.count());
-        Q_FOREACH (mKCal::Notebook::Ptr nbPtr, notebookList) {
-            LOG_DEBUG(nbPtr->uid() << "     Notebook's' Account ID " << nbPtr->account() << "    Looking for Account ID = " << aId);
-            if (nbPtr->account() == aId) {
-                nbUid = nbPtr->uid();
-            }
-        }
-        if (nbUid.isNull() || nbUid.isEmpty()) {
-            finishedWithError(Buteo::SyncResults::DATABASE_FAILURE, QStringLiteral("Cannot find notebook UID, cannot save any events"));
-            return;
-        }
-        storage->loadNotebookIncidences(nbUid);
+        QString nbUid = mNotebook->uid();
         KCalCore::Event::Ptr event ;
         KCalCore::Todo::Ptr todo ;
         KCalCore::Journal::Ptr journal ;
@@ -216,7 +209,7 @@ void Report::processEvents()
             switch(item->incidencePtr()->type()) {
                 case KCalCore::IncidenceBase::TypeEvent:
                     event = item->incidencePtr().staticCast<KCalCore::Event>();
-                    origEvent = calendar->event(event->uid());
+                    origEvent = mCalendar->event(event->uid());
                     LOG_DEBUG("UID of the event = " << event->uid());
                     //If Event is already added to Calendar, then update its property
                     if (origEvent != NULL) {
@@ -245,12 +238,14 @@ void Report::processEvents()
                     } else {
                         event->setCustomProperty("buteo", "uri", item->href());
                         event->setCustomProperty("buteo", "etag", item->etag());
-                        calendar->addEvent(event, nbUid);
+                        if (!mCalendar->addEvent(event, nbUid)) {
+                            LOG_WARNING("Unable to add event" << event->uid() << "to notebook" << nbUid);
+                        }
                     }
                     break;
                 case KCalCore::IncidenceBase::TypeTodo:
                     todo = item->incidencePtr().staticCast<KCalCore::Todo>();
-                    origTodo = calendar->todo(todo->uid());
+                    origTodo = mCalendar->todo(todo->uid());
                     //If Event is already added to Calendar, then update its property
                     if (origTodo != NULL) {
                         origTodo->startUpdates();
@@ -268,23 +263,24 @@ void Report::processEvents()
                     } else {
                         todo->setCustomProperty("buteo", "uri", item->href());
                         todo->setCustomProperty("buteo", "etag", item->etag());
-                        calendar->addTodo(todo, nbUid);
+                        if (!mCalendar->addTodo(todo, nbUid)) {
+                            LOG_WARNING("Unable to add todo" << todo->uid() << "to notebook" << nbUid);
+                        }
                     }
                     break;
                 case KCalCore::IncidenceBase::TypeJournal:
                     journal = item->incidencePtr().staticCast<KCalCore::Journal>();
                     journal->setCustomProperty("buteo", "uri", item->href());
                     journal->setCustomProperty("buteo", "etag", item->etag());
-                    calendar->addJournal(journal, nbUid);
+                    if (!mCalendar->addJournal(journal, nbUid)) {
+                        LOG_WARNING("Unable to add event" << journal->uid() << "to notebook" << nbUid);
+                    }
                     break;
                 case KCalCore::IncidenceBase::TypeFreeBusy:
                 case KCalCore::IncidenceBase::TypeUnknown:
                     break;
             }
         }
-        calendar->save();
-        storage->save();
-        storage->close();
     }
     finishedWithSuccess();
 }
@@ -292,6 +288,8 @@ void Report::processEvents()
 void Report::processETags()
 {
     FUNCTION_CALL_TRACE;
+
+    LOG_DEBUG("Process tags for server path" << mServerPath);
 
     if (wasDeleted()) {
         LOG_DEBUG(command() << "request was aborted");
@@ -324,55 +322,35 @@ void Report::processETags()
         LOG_DEBUG("Total content length of the data = " << data.length());
         QHash<QString, CDItem*> map = reader.getIncidenceMap();
         QStringList eventIdList;
-        mKCal::ExtendedCalendar::Ptr calendar = mKCal::ExtendedCalendar::Ptr(new mKCal::ExtendedCalendar(KDateTime::Spec::UTC()));
-        mKCal::ExtendedStorage::Ptr storage = calendar->defaultStorage(calendar);
-        storage->open();
-        QString aId = QString::number(mSettings->accountId());
-        QString nbUid;
-        mKCal::Notebook::List notebookList = storage->notebooks();
-        LOG_DEBUG("Total Number of Notebooks in device = " << notebookList.count());
-        Q_FOREACH (mKCal::Notebook::Ptr nbPtr, notebookList) {
-            if(nbPtr->account() == aId) {
-                nbUid = nbPtr->uid();
-            }
-        }
-        if (nbUid.isNull() || nbUid.isEmpty()) {            
-            finishedWithError(Buteo::SyncResults::DATABASE_FAILURE, QStringLiteral("Cannot find notebook UID, cannot save any events"));
+
+        // Incidences must be loaded with ExtendedStorage::allIncidences() rather than
+        // ExtendedCalendar::incidences(), because the latter will load incidences from all
+        // notebooks, rather than just the one for this report.
+        KCalCore::Incidence::List storageIncidenceList;
+        if (!mStorage->allIncidences(&storageIncidenceList, mNotebook->uid())) {
+            finishedWithError(Buteo::SyncResults::DATABASE_FAILURE, QString("Unable to load storage incidences for notebook: %1").arg(mNotebook->uid()));
             return;
         }
-        storage->loadNotebookIncidences(nbUid);
-
-        KCalCore::Incidence::List incidenceList = calendar->incidences(QDateTime::currentDateTime().addMonths(-12).date(),
-                                                                       QDateTime::currentDateTime().addMonths(12).date());
-        LOG_DEBUG("Total incidences in list = " << incidenceList.count());
-        KCalCore::Event::Ptr event ;
-        KCalCore::Todo::Ptr todo ;
-        KCalCore::Journal::Ptr journal ;
-        Q_FOREACH (KCalCore::Incidence::Ptr incidence , incidenceList) {
+        // Since these incidence refs come from ExtendedStorage rather than ExtendedCalendar,
+        // calling ExtendedCalendar::deleteEvent() etc. with these refs will fail, so save the refs to
+        // a list and CalDavClient can match them to refs from ExtendedCalendar later to delete them.
+        Q_FOREACH (KCalCore::Incidence::Ptr incidence, storageIncidenceList) {
             QString uri = incidence->customProperty("buteo", "uri");
             if (uri == NULL || uri.isEmpty()) {
                 //Newly added to Local DB -- Skip this incidence
                 continue;
             }
-
             CDItem *item = map.take(uri);
             if (item == 0) {
-                switch(incidence->type()) {
-                    case KCalCore::IncidenceBase::TypeEvent:
-                        event = incidence.staticCast<KCalCore::Event>();
-                        LOG_DEBUG("DELETING Event = " << uri << calendar->deleteEvent(event));
-                        break;
-                    case KCalCore::IncidenceBase::TypeTodo:
-                        todo = incidence.staticCast<KCalCore::Todo>();
-                        LOG_DEBUG("DELETING Todo = " << uri << calendar->deleteTodo(todo));
-                        break;
-                    case KCalCore::IncidenceBase::TypeJournal:
-                        journal = incidence.staticCast<KCalCore::Journal>();
-                        LOG_DEBUG("DELETING Journal = " << uri << calendar->deleteJournal(journal));
-                        break;
-                    case KCalCore::IncidenceBase::TypeFreeBusy:
-                    case KCalCore::IncidenceBase::TypeUnknown:
-                        break;
+                switch (incidence->type()) {
+                case KCalCore::IncidenceBase::TypeEvent:
+                case KCalCore::IncidenceBase::TypeTodo:
+                case KCalCore::IncidenceBase::TypeJournal:
+                    mIncidencesToDelete.append(incidence);
+                    break;
+                case KCalCore::IncidenceBase::TypeFreeBusy:
+                case KCalCore::IncidenceBase::TypeUnknown:
+                    break;
                 }
                 continue;
             } else {
@@ -381,17 +359,12 @@ void Report::processETags()
                 }
             }
         }
-
         eventIdList.append(map.keys());
         if (!eventIdList.isEmpty()) {
-            multiGetEvents(eventIdList, true);
+            multiGetEvents(mServerPath, eventIdList, true);
         } else {
             finishedWithSuccess();
         }
-
-        calendar->save();
-        storage->save();
-        storage->close();
     }
 }
 
@@ -417,10 +390,6 @@ void Report::updateETags()
         reader.read(data);
         LOG_DEBUG("Total content length of the data = " << data.length());
         QHash<QString, CDItem*> map = reader.getIncidenceMap();
-        mKCal::ExtendedCalendar::Ptr calendar = mKCal::ExtendedCalendar::Ptr(new mKCal::ExtendedCalendar(KDateTime::Spec::UTC()));
-        mKCal::ExtendedStorage::Ptr storage = calendar->defaultStorage(calendar);
-        storage->open();
-        storage->load();
         KCalCore::Event::Ptr event;
         KCalCore::Todo::Ptr todo;
         KCalCore::Journal::Ptr journal;
@@ -430,7 +399,7 @@ void Report::updateETags()
             QString uid = item->incidencePtr()->uid();
             LOG_DEBUG("UID to be updated = " << uid << "     ETAG = " << item->etag());
             ++iter;
-            event = calendar->event(uid);
+            event = mCalendar->event(uid);
             if (!event.isNull()) {
                 event->startUpdates();
                 event->setCustomProperty("buteo", "etag", item->etag());
@@ -438,14 +407,14 @@ void Report::updateETags()
                 LOG_DEBUG("ETAG was updated = " << item->etag());
                 continue;
             }
-            todo = calendar->todo(uid);
+            todo = mCalendar->todo(uid);
             if (!todo.isNull()) {
                 todo->startUpdates();
                 todo->setCustomProperty("buteo", "etag", item->etag());
                 todo->endUpdates();
                 continue;
             }
-            journal = calendar->journal(uid);
+            journal = mCalendar->journal(uid);
             if (!journal.isNull()) {
                 journal->startUpdates();
                 journal->setCustomProperty("buteo", "etag", item->etag());
@@ -454,11 +423,11 @@ void Report::updateETags()
             }
             LOG_DEBUG("Could not find the correct TYPE of INCIDENCE ");
         }
-
-        calendar->save();
-        storage->save();
-        storage->close();
     }
-
     finishedWithSuccess();
+}
+
+KCalCore::Incidence::List Report::incidencesToDelete() const
+{
+    return mIncidencesToDelete;
 }

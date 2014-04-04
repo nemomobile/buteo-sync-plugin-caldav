@@ -43,6 +43,75 @@
 class QNetworkAccessManager;
 class Request;
 
+/*
+    This plugin allows buteo to sync events with an online CalDAV server. Changes are read from
+    and written to the local mkcal database. The plugin integrates with the accounts&sso
+    libraries to sync events specific to particular user accounts.
+
+    To perform a sync with this plugin, you need:
+        - An online CalDAV server
+        - An account created through the accounts&sso libraries
+        - A buteo profile
+
+    For example, to load the calendar at https://www.myserver.com/myusername/calendars/My_Calendar/
+    you would:
+
+    1) Create an accounts&sso account
+
+    2) Add a service to the account, e.g. 'my_caldav_service'
+
+       The service settings must have the appropriate credentials and sign-in values,
+       including a "CredentialsId", so that the CalDavClient can log in through the
+       accounts sign-in framework.
+
+       Also, the service needs some setting values to list the calendars to be synchronized:
+       For example:
+            server_address = https://www.myserver.com
+            calendars = ["/myusername/calendars/My_Calendar/"]
+            calendar_display_names = ["My Personal Calendar"]
+            calendar_colors = ["#ff0000"]
+            enabled_calendars = ["/myusername/calendars/My_Calendar/"]
+
+        Multiple calendars may be listed:
+            calendars = ["/path/to/calendarA", "/path/to/calendarB"]
+            calendar_display_names = ["Calendar A", "Calendar B"]
+            calendar_colors = ["#ff0000", "#0000ff"]
+            enabled_calendars = ["/path/to/calendarB"]      <-- only calendarB will be synced
+
+     3) Add a buteo profile to <Sync::syncCacheDir()>/.cache/msyncd/sync/.
+        Use the supplied src/xmls/sync/caldav-sync.xml as a template.
+
+        Additionally, the profile needs:
+            - an "accountid" <key> element with the account id
+            - an "account_service_name" <key> element with the account service name
+
+        For example, if the ID of the account from step 1) is '55':
+
+        <?xml version="1.0" encoding="UTF-8"?>
+        <profile name="caldav-sync-55" type="sync">
+            <key name="accountid" value="55"/>
+            <key name="account_service_name" value="my_caldav_service"/>
+            <key name="destinationtype" value="online"/>
+            <key name="displayname" value="my profile"/>
+            <key name="enabled" value="true"/>
+            <key name="hidden" value="true"/>
+            <key name="use_accounts" value="true"/>
+
+            <profile name="caldav" type="client">
+                <key name="Sync Direction" value="two-way"/>
+                <key name="Sync Protocol" value="caldav"/>
+                <key name="Sync Transport" value="HTTP"/>
+                <key name="conflictpolicy" value="prefer remote"/>
+            </profile>
+        </profile>
+
+
+     Once you have all these, the profile can be synced via dbus using the profile name. E.g.
+
+        dbus-send --session --type=method_call --print-reply \
+            --dest=com.meego.msyncd /synchronizer com.meego.msyncd.startSync string:caldav-sync-55
+  */
+
 class BUTEOCALDAVPLUGINSHARED_EXPORT CalDavClient : public Buteo::ClientPlugin
 {
     Q_OBJECT
@@ -76,11 +145,16 @@ private:
     void abort(Sync::SyncStatus aStatus = Sync::SYNC_ABORTED);
     bool initConfig();
     void closeConfig();
-    void syncFinished(int minorErrorCode, const QString &errorMessage);
+    void syncFinished(int minorErrorCode, const QString &message);
     void clearRequests();
-    void retrieveETags();
+    void retrieveETags(const QString &serverPath);
+    QList<Settings::CalendarInfo> loadCalendars(Accounts::Account *account, Accounts::Service srv) const;
 
+    void syncNotebookChanges(mKCal::ExtendedStorage::Ptr storage,
+                             mKCal::Notebook::Ptr notebook,
+                             const QString &serverPath);
     bool loadStorageChanges(mKCal::ExtendedStorage::Ptr storage,
+                            const QString &notebookUid,
                             const KDateTime &fromDate,
                             KCalCore::Incidence::List *inserted,
                             KCalCore::Incidence::List *modified,
@@ -88,6 +162,7 @@ private:
                             QString *error);
     int removeCommonIncidences(KCalCore::Incidence::List *inserted,
                                KCalCore::Incidence::List *deleted);
+    void deleteIncidences(const KCalCore::Incidence::List &sourceList);
 
 
     Buteo::SyncProfile::SyncDirection syncDirection();
@@ -97,8 +172,10 @@ private:
     QNetworkAccessManager*      mNAManager;
     Accounts::Manager*          mManager;
     AuthHandler*                mAuth;
+    mKCal::ExtendedCalendar::Ptr mCalendar;
+    mKCal::ExtendedStorage::Ptr mStorage;
+    KCalCore::Incidence::List   mIncidencesToDelete;
     Buteo::SyncResults          mResults;
-    quint32                     mAccountId;
     Sync::SyncStatus            mSyncStatus;
     Buteo::SyncProfile::SyncDirection mSyncDirection;
     Buteo::SyncProfile::ConflictResolutionPolicy mConflictResPolicy;

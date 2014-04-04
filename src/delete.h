@@ -42,7 +42,7 @@ class Delete : public Request
 public:
     explicit Delete(QNetworkAccessManager *manager, Settings *settings, QObject *parent = 0);
 
-    void deleteEvent(KCalCore::Incidence::Ptr incidence);
+    void deleteEvent(const QString &serverPath, KCalCore::Incidence::Ptr incidence);
 
 private Q_SLOTS:
     void requestFinished();

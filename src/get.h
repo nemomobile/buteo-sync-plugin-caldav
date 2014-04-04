@@ -10,7 +10,7 @@ class Get : public Request
 public:
     explicit Get(QNetworkAccessManager *manager, Settings *settings, QObject *parent = 0);
 
-    void getEvent(const QString &u);
+    void getEvent(const QString &serverPath, const QString &uid);
 
 private Q_SLOTS:
     void requestFinished();

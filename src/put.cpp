@@ -40,9 +40,11 @@ Put::Put(QNetworkAccessManager *manager, Settings *settings, QObject *parent)
 {
 }
 
-void Put::updateEvent(KCalCore::Incidence::Ptr incidence)
+void Put::updateEvent(const QString &serverPath, KCalCore::Incidence::Ptr incidence)
 {
     FUNCTION_CALL_TRACE;
+
+    Q_UNUSED(serverPath);
 
     KCalCore::ICalFormat *icalFormat = new KCalCore::ICalFormat;
     QString data = icalFormat->toICalString(incidence);
@@ -55,25 +57,8 @@ void Put::updateEvent(KCalCore::Incidence::Ptr incidence)
     mUidList.append(incidence->uid());
     QNetworkRequest request;
 
-    // Get a URL of the server + path + filename.
-    // Settings::makeUrl() has server+path and 'uri' has path+filename, so strip
-    // the path from url and use the one from 'uri'.
-    QUrl url = mSettings->makeUrl();
-    QString urlString = url.toString();
-    int urlPathIndex = urlString.indexOf(url.path());
-    if (urlPathIndex >= 0) {
-        urlString = urlString.mid(0, urlPathIndex);
-    }
-    url.setUrl(urlString + uri);
-
-    if (!mSettings->authToken().isEmpty()) {
-        request.setRawHeader(QString("Authorization").toLatin1(),
-                             QString("Bearer " + mSettings->authToken()).toLatin1());
-    } else {
-        url.setUserName(mSettings->username());
-        url.setPassword(mSettings->password());
-    }
-    request.setUrl(url);
+    // 'uri' contains the calendar path + filename
+    prepareRequest(&request, uri);
     request.setRawHeader("If-Match", etag.toLatin1());
     request.setHeader(QNetworkRequest::ContentTypeHeader, "text/calendar; charset=utf-8");
 
@@ -86,7 +71,7 @@ void Put::updateEvent(KCalCore::Incidence::Ptr incidence)
             this, SLOT(slotSslErrors(QList<QSslError>)));
 }
 
-void Put::createEvent(KCalCore::Incidence::Ptr incidence)
+void Put::createEvent(const QString &serverPath, KCalCore::Incidence::Ptr incidence)
 {
     FUNCTION_CALL_TRACE;
 
@@ -100,18 +85,10 @@ void Put::createEvent(KCalCore::Incidence::Ptr incidence)
     QString uid  = incidence->uid();
     mUidList.append(incidence->uid());
     QNetworkRequest request;
-    QUrl url(mSettings->url() + uid + ".ics");
-
+    prepareRequest(&request, serverPath + uid + ".ics");
     request.setRawHeader("If-None-Match", "*");
     request.setHeader(QNetworkRequest::ContentLengthHeader, ical.length());
     request.setHeader(QNetworkRequest::ContentTypeHeader, "text/calendar; charset=utf-8");
-    if (!mSettings->authToken().isEmpty()) {
-        request.setRawHeader(QString("Authorization").toLatin1(), QString("Bearer " + mSettings->authToken()).toLatin1());
-    } else {
-        url.setUserName(mSettings->username());
-        url.setPassword(mSettings->password());
-    }
-    request.setUrl(url);
 
     QBuffer *buffer = new QBuffer(this);
     buffer->setData(ical.toLatin1());

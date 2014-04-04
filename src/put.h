@@ -43,8 +43,8 @@ class Put : public Request
 public:
     explicit Put(QNetworkAccessManager *manager, Settings *settings, QObject *parent = 0);
 
-    void updateEvent(KCalCore::Incidence::Ptr incidence);
-    void createEvent(KCalCore::Incidence::Ptr incidence);
+    void updateEvent(const QString &serverPath, KCalCore::Incidence::Ptr incidence);
+    void createEvent(const QString &serverPath, KCalCore::Incidence::Ptr incidence);
 
 private Q_SLOTS:
     void requestFinished();

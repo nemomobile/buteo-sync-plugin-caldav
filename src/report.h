@@ -26,6 +26,8 @@
 
 #include "request.h"
 
+#include <extendedstorage.h>
+
 #include <QObject>
 #include <QNetworkReply>
 #include <QSslError>
@@ -38,16 +40,31 @@ class Report : public Request
     Q_OBJECT
 
 public:
-    explicit Report(QNetworkAccessManager *manager, Settings *settings, QObject *parent = 0);
+    explicit Report(QNetworkAccessManager *manager,
+                    Settings *settings,
+                    mKCal::ExtendedCalendar::Ptr calendar,
+                    mKCal::ExtendedStorage::Ptr storage,
+                    QObject *parent = 0);
 
-    void getAllEvents();
-    void getAllETags();
-    void multiGetEvents(const QStringList &eventIdList, bool includeCalendarData);
+    void getAllEvents(const QString &serverPath);
+    void getAllETags(const QString &serverPath);
+
+    KCalCore::Incidence::List incidencesToDelete() const;
 
 private Q_SLOTS:
     void processEvents();
     void processETags();
     void updateETags();
+
+private:
+    void multiGetEvents(const QString &serverPath, const QStringList &eventIdList, bool includeCalendarData);
+    bool initRequest(const QString &serverPath);
+
+    QString mServerPath;
+    mKCal::ExtendedCalendar::Ptr mCalendar;
+    mKCal::ExtendedStorage::Ptr mStorage;
+    mKCal::Notebook::Ptr mNotebook;
+    KCalCore::Incidence::List mIncidencesToDelete;
 };
 
 #endif // REPORT_H

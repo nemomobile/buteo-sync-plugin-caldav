@@ -91,15 +91,29 @@ void Request::finishedWithError(int minorCode, const QString &errorString)
     emit finished();
 }
 
-void Request::finishedWithInternalError()
+void Request::finishedWithInternalError(const QString &errorString)
 {
-    finishedWithError(Buteo::SyncResults::INTERNAL_ERROR, QStringLiteral("Internal error"));
+    finishedWithError(Buteo::SyncResults::INTERNAL_ERROR, errorString.isEmpty() ? QStringLiteral("Internal error") : errorString);
 }
 
 void Request::finishedWithSuccess()
 {
     mMinorCode = Buteo::SyncResults::NO_ERROR;
     emit finished();
+}
+
+void Request::prepareRequest(QNetworkRequest *request, const QString &requestPath)
+{
+    QUrl url(mSettings->serverAddress());
+    if (!mSettings->authToken().isEmpty()) {
+        request->setRawHeader(QString("Authorization").toLatin1(),
+                              QString("Bearer " + mSettings->authToken()).toLatin1());
+    } else {
+        url.setUserName(mSettings->username());
+        url.setPassword(mSettings->password());
+    }
+    url.setPath(requestPath);
+    request->setUrl(url);
 }
 
 bool Request::wasDeleted() const
