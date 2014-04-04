@@ -54,10 +54,9 @@ public:
 private Q_SLOTS:
     void processEvents();
     void processETags();
-    void updateETags();
 
 private:
-    void multiGetEvents(const QString &serverPath, const QStringList &eventIdList, bool includeCalendarData);
+    void multiGetEvents(const QString &serverPath, const QStringList &eventIdList);
     bool initRequest(const QString &serverPath);
 
     QString mServerPath;

@@ -128,7 +128,7 @@ void Report::getAllETags(const QString &serverPath)
             this, SLOT(slotSslErrors(QList<QSslError>)));
 }
 
-void Report::multiGetEvents(const QString &serverPath, const QStringList &eventIdList, bool includeCalendarData)
+void Report::multiGetEvents(const QString &serverPath, const QStringList &eventIdList)
 {
     FUNCTION_CALL_TRACE;
 
@@ -142,12 +142,7 @@ void Report::multiGetEvents(const QString &serverPath, const QStringList &eventI
     request.setHeader(QNetworkRequest::ContentTypeHeader, "application/xml; charset=utf-8");
 
     QString multiGetRequest = "<c:calendar-multiget xmlns:d=\"DAV:\" xmlns:c=\"urn:ietf:params:xml:ns:caldav\">" \
-                              "<d:prop><d:getetag />";
-    if (includeCalendarData) {
-        multiGetRequest.append("<c:calendar-data />");
-    }
-    multiGetRequest.append("</d:prop>");
-
+                              "<d:prop><d:getetag /><c:calendar-data /></d:prop>";
     Q_FOREACH (const QString &eventId , eventIdList) {
         multiGetRequest.append("<d:href>");
         multiGetRequest.append(eventId);
@@ -158,12 +153,7 @@ void Report::multiGetEvents(const QString &serverPath, const QStringList &eventI
     QBuffer *buffer = new QBuffer(this);
     buffer->setData(multiGetRequest.toLatin1());
     QNetworkReply *reply = mNAManager->sendCustomRequest(request, REQUEST_TYPE.toLatin1(), buffer);
-
-    if (includeCalendarData) {
-        connect(reply, SIGNAL(finished()), this, SLOT(processEvents()));
-    } else {
-        connect(reply, SIGNAL(finished()), this, SLOT(updateETags()));
-    }
+    connect(reply, SIGNAL(finished()), this, SLOT(processEvents()));
     connect(reply, SIGNAL(sslErrors(QList<QSslError>)),
             this, SLOT(slotSslErrors(QList<QSslError>)));
 }
@@ -366,72 +356,11 @@ void Report::processETags()
         eventIdList.append(map.keys());
         if (!eventIdList.isEmpty()) {
             // some incidences have changed on the server, so fetch the new details
-            multiGetEvents(mServerPath, eventIdList, true);
+            multiGetEvents(mServerPath, eventIdList);
         } else {
             finishedWithSuccess();
         }
     }
-}
-
-void Report::updateETags()
-{
-    FUNCTION_CALL_TRACE;
-
-    QNetworkReply *reply = qobject_cast<QNetworkReply*>(sender());
-    if (!reply) {
-        finishedWithInternalError();
-        return;
-    }
-    if (reply->error() != QNetworkReply::NoError) {
-        finishedWithReplyResult(reply->error());
-        return;
-    }
-    QByteArray data = reply->readAll();
-    debugReply(*reply, data);
-    reply->deleteLater();
-
-    if (!data.isNull() && !data.isEmpty()) {
-        Reader reader;
-        reader.read(data);
-        LOG_DEBUG("Total content length of the data = " << data.length());
-        const QHash<QString, Reader::CalendarResource> &map = reader.results();
-        KCalCore::Event::Ptr event;
-        KCalCore::Todo::Ptr todo;
-        KCalCore::Journal::Ptr journal;
-        QHash<QString, Reader::CalendarResource>::const_iterator iter = map.constBegin();
-        while (iter != map.constEnd()) {
-            const Reader::CalendarResource &resource = *iter;
-            KCalCore::ICalFormat iCalFormat;
-            KCalCore::Incidence::Ptr incidence = iCalFormat.fromString(resource.iCalData);
-            QString uid = incidence->uid();
-            LOG_DEBUG("UID to be updated = " << uid << "     ETAG = " << resource.etag);
-            ++iter;
-            event = mCalendar->event(uid);
-            if (!event.isNull()) {
-                event->startUpdates();
-                event->setCustomProperty("buteo", "etag", resource.etag);
-                event->endUpdates();
-                LOG_DEBUG("ETAG was updated = " << resource.etag);
-                continue;
-            }
-            todo = mCalendar->todo(uid);
-            if (!todo.isNull()) {
-                todo->startUpdates();
-                todo->setCustomProperty("buteo", "etag", resource.etag);
-                todo->endUpdates();
-                continue;
-            }
-            journal = mCalendar->journal(uid);
-            if (!journal.isNull()) {
-                journal->startUpdates();
-                journal->setCustomProperty("buteo", "etag", resource.etag);
-                journal->endUpdates();
-                continue;
-            }
-            LOG_DEBUG("Could not find the correct TYPE of INCIDENCE ");
-        }
-    }
-    finishedWithSuccess();
 }
 
 KCalCore::Incidence::List Report::incidencesToDelete() const
