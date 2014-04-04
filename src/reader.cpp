@@ -22,19 +22,16 @@
  */
 
 #include "reader.h"
-#include "cditem.h"
-
-#include <incidence.h>
-#include <icalformat.h>
 
 #include <QDebug>
-#include <QStringList>
 #include <QUrl>
+#include <QXmlStreamReader>
 
 #include <LogMacros.h>
 
 Reader::Reader(QObject *parent)
     : QObject(parent)
+    , mReader(0)
 {
 }
 
@@ -45,12 +42,18 @@ Reader::~Reader()
 
 void Reader::read(const QByteArray &data)
 {
+    delete mReader;
     mReader = new QXmlStreamReader(data);
     while (mReader->readNextStartElement()) {
         if (mReader->name() == "multistatus") {
             readMultiStatus();
         }
     }
+}
+
+const QHash<QString, Reader::CalendarResource>& Reader::results() const
+{
+    return mResults;
 }
 
 void Reader::readMultiStatus()
@@ -64,72 +67,40 @@ void Reader::readMultiStatus()
 
 void Reader::readResponse()
 {
-    CDItem *item = new CDItem();
+    CalendarResource resource;
     while (mReader->readNextStartElement()) {
         if (mReader->name() == "href") {
-            readHref(item);
+            resource.href = mReader->readElementText();
         } else if (mReader->name() == "propstat") {
-            readPropStat(item);
+            readPropStat(&resource);
         }
     }
-    QString uid = item->href();
-    if (uid.isEmpty()) {
-        LOG_DEBUG("UID was empty... Returning without inserting......");
+    if (resource.href.isEmpty()) {
+        LOG_WARNING("Ignoring received calendar object data, is missing href value");
         return;
     }
-    LOG_DEBUG(QUrl::fromPercentEncoding(uid.toLatin1()));
-    mIncidenceMap.insert(QUrl::fromPercentEncoding(uid.toLatin1()), item);
+    LOG_DEBUG(QUrl::fromPercentEncoding(resource.href.toLatin1()));
+    mResults.insert(QUrl::fromPercentEncoding(resource.href.toLatin1()), resource);
 }
 
-void Reader::readHref(CDItem* item)
-{
-    item->setHref(mReader->readElementText());
-}
-
-void Reader::readPropStat(CDItem* item)
+void Reader::readPropStat(CalendarResource *resource)
 {
     while (mReader->readNextStartElement()) {
         if (mReader->name() == "prop") {
-            readProp(item);
+            readProp(resource);
         } else if (mReader->name() == "status") {
-            readStatus(item);
+            resource->status = mReader->readElementText();
         }
     }
 }
 
-void Reader::readStatus(CDItem* item)
-{
-    item->setStatus(mReader->readElementText());
-}
-
-void Reader::readProp(CDItem* item)
+void Reader::readProp(CalendarResource *resource)
 {
     while (mReader->readNextStartElement()) {
         if (mReader->name() == "getetag") {
-            readGetETag(item);
+            resource->etag = mReader->readElementText();
         } else if (mReader->name() == "calendar-data") {
-            readCalendarData(item);
+            resource->iCalData = mReader->readElementText();
         }
     }
-}
-
-void Reader::readGetETag(CDItem* item)
-{
-    item->setETag(mReader->readElementText());
-}
-
-void Reader::readCalendarData(CDItem* item)
-{
-    QString event = mReader->readElementText();
-    KCalCore::ICalFormat *icalFormat = new KCalCore::ICalFormat();
-    KCalCore::Incidence::Ptr incidence = icalFormat->fromString(event);
-    if (incidence != 0) {
-        item->setIncidence(incidence);
-        KCalCore::Incidence *inc = (KCalCore::Incidence*)incidence.data();
-    }
-}
-
-QHash<QString, CDItem *> Reader::getIncidenceMap()
-{
-    return mIncidenceMap;
 }

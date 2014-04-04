@@ -26,7 +26,6 @@ HEADERS += \
     put.h \
     delete.h \
     reader.h \
-    cditem.h \
     settings.h \
     request.h \
     get.h \
@@ -38,7 +37,6 @@ SOURCES += \
     put.cpp \
     delete.cpp \
     reader.cpp \
-    cditem.cpp \
     settings.cpp \
     request.cpp \
     get.cpp \
