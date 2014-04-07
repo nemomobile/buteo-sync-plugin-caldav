@@ -25,12 +25,11 @@
 #define REPORT_H
 
 #include "request.h"
+#include "reader.h"
 
-#include <extendedstorage.h>
+#include <incidence.h>
 
 #include <QObject>
-#include <QNetworkReply>
-#include <QSslError>
 
 class QNetworkAccessManager;
 class Settings;
@@ -40,16 +39,13 @@ class Report : public Request
     Q_OBJECT
 
 public:
-    explicit Report(QNetworkAccessManager *manager,
-                    Settings *settings,
-                    mKCal::ExtendedCalendar::Ptr calendar,
-                    mKCal::ExtendedStorage::Ptr storage,
-                    QObject *parent = 0);
+    explicit Report(QNetworkAccessManager *manager, Settings *settings, QObject *parent = 0);
 
     void getAllEvents(const QString &serverPath);
-    void getAllETags(const QString &serverPath);
+    void getAllETags(const QString &serverPath, const KCalCore::Incidence::List &currentLocalIncidences);
 
-    KCalCore::Incidence::List incidencesToDelete() const;
+    QList<Reader::CalendarResource> receivedCalendarResources() const;
+    QStringList localIncidenceUidsNotOnServer() const;
 
 private Q_SLOTS:
     void processEvents();
@@ -59,11 +55,10 @@ private:
     void multiGetEvents(const QString &serverPath, const QStringList &eventIdList);
     bool initRequest(const QString &serverPath);
 
+    QList<Reader::CalendarResource> mReceivedResources;
+    QStringList mLocalIncidenceUidsNotOnServer;
+    KCalCore::Incidence::List mLocalIncidences;
     QString mServerPath;
-    mKCal::ExtendedCalendar::Ptr mCalendar;
-    mKCal::ExtendedStorage::Ptr mStorage;
-    mKCal::Notebook::Ptr mNotebook;
-    KCalCore::Incidence::List mIncidencesToDelete;
 };
 
 #endif // REPORT_H

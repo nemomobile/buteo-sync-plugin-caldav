@@ -22,15 +22,12 @@
  */
 
 #include "caldavclient.h"
-#include "report.h"
-#include "put.h"
-#include "delete.h"
-#include "reader.h"
+#include "notebooksyncagent.h"
+#include "notebooksyncdatabase.h"
 
 #include <extendedcalendar.h>
 #include <extendedstorage.h>
 #include <notebook.h>
-#include <icalformat.h>
 
 #include <QNetworkAccessManager>
 #include <QNetworkReply>
@@ -43,6 +40,8 @@
 #include <LogMacros.h>
 #include <ProfileEngineDefs.h>
 #include <ProfileManager.h>
+
+#define BUTEO_ENABLE_DEBUG
 
 #define KEY_ACCOUNT_SERVICE_NAME "account_service_name"
 
@@ -172,11 +171,11 @@ bool CalDavClient::cleanUp()
     // all the notebooks associated with the account.
 
     QString accountIdString = iProfile.key(Buteo::KEY_ACCOUNT_ID);
-    if (accountIdString.isEmpty()) {
+    int accountId = accountIdString.toInt();
+    if (accountId == 0) {
         LOG_CRITICAL("profile does not specify" << Buteo::KEY_ACCOUNT_ID);
         return false;
     }
-    QString notebookAccountPrefix = accountIdString + "-";
 
     mKCal::ExtendedCalendar::Ptr calendar = mKCal::ExtendedCalendar::Ptr(new mKCal::ExtendedCalendar(KDateTime::Spec::UTC()));
     mKCal::ExtendedStorage::Ptr storage = mKCal::ExtendedCalendar::defaultStorage(calendar);
@@ -186,30 +185,39 @@ bool CalDavClient::cleanUp()
         return false;
     }
 
+    deleteNotebooksForAccount(accountId, calendar, storage);
+    storage->close();
+    calendar->close();
+    return true;
+}
+
+void CalDavClient::deleteNotebooksForAccount(int accountId, mKCal::ExtendedCalendar::Ptr calendar, mKCal::ExtendedStorage::Ptr storage)
+{
+    FUNCTION_CALL_TRACE;
+
+    QString notebookAccountPrefix = QString::number(accountId) + "-";
     mKCal::Notebook::List notebookList = storage->notebooks();
     LOG_DEBUG("Total Number of Notebooks in device = " << notebookList.count());
     int deletedCount = 0;
     Q_FOREACH (mKCal::Notebook::Ptr notebook, notebookList) {
         if (notebook->account().startsWith(notebookAccountPrefix)) {
             if (storage->loadNotebookIncidences(notebook->uid())) {
-                calendar->deleteAllIncidences();   
+                calendar->deleteAllIncidences();
             } else {
-                LOG_WARNING("Unable to load incidences for notebook:" << notebook->uid() << "for account:" << accountIdString);
+                LOG_WARNING("Unable to load incidences for notebook:" << notebook->uid() << "for account:" << accountId);
             }
             if (storage->deleteNotebook(notebook)) {
                 deletedCount++;
             } else {
-                LOG_WARNING("Unable to delete notebook:" << notebook->uid() << "for account:" << accountIdString);
+                LOG_WARNING("Unable to delete notebook:" << notebook->uid() << "for account:" << accountId);
             }
+            NotebookSyncDatabase::clearEntriesForNotebook(notebook->uid());
         }
     }
     LOG_DEBUG("Deleted" << deletedCount << "notebooks");
     if (deletedCount > 0 && !storage->save()) {
-        LOG_CRITICAL("Unable to save calendar storage");
+        LOG_CRITICAL("Unable to save calendar storage after deleting notebooks");
     }
-    storage->close();
-    calendar->close();
-    return true;
 }
 
 void CalDavClient::connectivityStateChanged(Sync::ConnectivityType aType, bool aState)
@@ -313,7 +321,11 @@ void CalDavClient::syncFinished(int minorErrorCode, const QString &message)
 {
     FUNCTION_CALL_TRACE;
 
-    clearRequests();
+    clearAgents();
+
+    if (mSlowSync && minorErrorCode != Buteo::SyncResults::NO_ERROR) {
+        deleteNotebooksForAccount(mSettings.accountId(), mCalendar, mStorage);
+    }
     if (mCalendar) {
         mCalendar->close();
     }
@@ -323,13 +335,13 @@ void CalDavClient::syncFinished(int minorErrorCode, const QString &message)
 
     if (minorErrorCode == Buteo::SyncResults::NO_ERROR) {
         LOG_DEBUG("CalDAV sync succeeded!" << message);
-        mResults = Buteo::SyncResults(QDateTime::currentDateTime().toUTC(),
+        mResults = Buteo::SyncResults(mSyncStartTime,
                                       Buteo::SyncResults::SYNC_RESULT_SUCCESS,
                                       Buteo::SyncResults::NO_ERROR);
         emit success(getProfileName(), message);
     } else {
         LOG_CRITICAL("CalDAV sync failed:" << minorErrorCode << message);
-        mResults = Buteo::SyncResults(QDateTime::currentDateTime().toUTC(),
+        mResults = Buteo::SyncResults(lastSyncTime(),       // don't change the last sync time
                                       Buteo::SyncResults::SYNC_RESULT_FAILED,
                                       minorErrorCode);
         emit error(getProfileName(), message, minorErrorCode);
@@ -380,93 +392,20 @@ void CalDavClient::startSlowSync()
         syncFinished(Buteo::SyncResults::DATABASE_FAILURE, "unable to open calendar storage");
         return;
     }
+
+    mSyncStartTime = QDateTime();
+
     Q_FOREACH (const Settings::CalendarInfo &calendarInfo, allCalendarInfo) {
-        mKCal::Notebook::Ptr notebook = mKCal::Notebook::Ptr(new mKCal::Notebook(calendarInfo.displayName, ""));
-        notebook->setAccount(mSettings.notebookId(calendarInfo.serverPath));
-        notebook->setPluginName(getPluginName());
-        notebook->setSyncProfile(getProfileName());
-        notebook->setColor(calendarInfo.color);
-        if (!mStorage->addNotebook(notebook)) {
-            syncFinished(Buteo::SyncResults::INTERNAL_ERROR, "unable to add notebook " + notebook->uid() + " for account/calendar " + notebook->account());
-            return;
-        }
-        LOG_DEBUG("NOTEBOOK created" << notebook->uid() << "account:" << notebook->account());
+        NotebookSyncAgent *agent = new NotebookSyncAgent(mCalendar, mStorage, mNAManager, &mSettings, calendarInfo.serverPath, this);
+        connect(agent, SIGNAL(finished(int,QString)),
+                this, SLOT(notebookSyncFinished(int,QString)));
+        mNotebookSyncAgents.append(agent);
+        agent->startSlowSync(calendarInfo.displayName,
+                             mSettings.notebookId(calendarInfo.serverPath),
+                             getPluginName(),
+                             getProfileName(),
+                             calendarInfo.color);
     }
-    Q_FOREACH (const Settings::CalendarInfo &calendarInfo, allCalendarInfo) {
-        Report *report = new Report(mNAManager, &mSettings, mCalendar, mStorage, this);
-        mRequests.insert(report);
-        connect(report, SIGNAL(finished()), this, SLOT(reportRequestFinished()));
-        report->getAllEvents(calendarInfo.serverPath);
-    }
-}
-
-bool CalDavClient::loadStorageChanges(const QString &notebookUid,
-                                      const KDateTime &fromDate,
-                                      KCalCore::Incidence::List *inserted,
-                                      KCalCore::Incidence::List *modified,
-                                      KCalCore::Incidence::List *deleted,
-                                      QString *error)
-{
-    FUNCTION_CALL_TRACE;
-
-    if (!mStorage) {
-        *error = "mStorage not defined";
-        return false;
-    }
-
-    if (!mStorage->insertedIncidences(inserted, fromDate, notebookUid)) {
-        *error = "mKCal::ExtendedStorage::insertedIncidences() failed";
-        return false;
-    }
-    if (!mStorage->modifiedIncidences(modified, fromDate, notebookUid)) {
-        *error = "mKCal::ExtendedStorage::modifiedIncidences() failed";
-        return false;
-    }
-    if (!mStorage->deletedIncidences(deleted, fromDate, notebookUid)) {
-        *error = "mKCal::ExtendedStorage::deletedIncidences() failed";
-        return false;
-    }
-
-    // If an event has changed to/from the caldav notebook and back since the last sync,
-    // it will be present in both the inserted and deleted lists. In this case, nothing
-    // has actually changed, so remove it from both lists.
-    int removed = removeCommonIncidences(inserted, deleted);
-    if (removed > 0) {
-        LOG_DEBUG("Removed" << removed << "UIDs found in both inserted and removed lists");
-    }
-
-    return true;
-}
-
-int CalDavClient::removeCommonIncidences(KCalCore::Incidence::List *firstList, KCalCore::Incidence::List *secondList)
-{
-    QSet<QString> firstListUids;
-    for (int i=0; i<firstList->count(); i++) {
-        firstListUids.insert(firstList->at(i)->uid());
-    }
-    QSet<QString> commonUids;
-    for (KCalCore::Incidence::List::iterator it = secondList->begin(); it != secondList->end();) {
-        KCalCore::Incidence::Ptr incidence = *it;
-        if (firstListUids.contains(incidence->uid())) {
-            commonUids.insert(incidence->uid());
-            it = secondList->erase(it);
-        } else {
-            ++it;
-        }
-    }
-    int removed = commonUids.count();
-    if (removed > 0) {
-        for (KCalCore::Incidence::List::iterator it = firstList->begin(); it != firstList->end();) {
-            KCalCore::Incidence::Ptr incidence = *it;
-            if (commonUids.contains(incidence->uid())) {
-                commonUids.remove(incidence->uid());
-                it = firstList->erase(it);
-            } else {
-                ++it;
-            }
-        }
-    }
-    return removed;
 }
 
 void CalDavClient::startQuickSync()
@@ -484,186 +423,79 @@ void CalDavClient::startQuickSync()
         syncFinished(Buteo::SyncResults::DATABASE_FAILURE, "unable to open calendar storage");
         return;
     }
-    if (!mStorage->load(QDateTime::currentDateTime().toUTC().addMonths(-6).date(),
-                      QDateTime::currentDateTime().toUTC().addMonths(12).date())) {
+
+    mSyncStartTime = QDateTime::currentDateTime().toUTC();
+    LOG_DEBUG("\n\n++++++++++++++ mSyncStartTime:" << mSyncStartTime << "LAST SYNC:" << lastSyncTime());
+
+    QDate fromDate = mSyncStartTime.addMonths(-6).date();
+    QDate toDate = mSyncStartTime.addMonths(12).date();
+    if (!mStorage->load(fromDate, toDate)) {
         syncFinished(Buteo::SyncResults::DATABASE_FAILURE, "unable to load calendar storage");
         return;
     }
+    KCalCore::Incidence::List calendarIncidences = mCalendar->incidences(fromDate, toDate);
     mKCal::Notebook::List notebookList = mStorage->notebooks();
     Q_FOREACH (mKCal::Notebook::Ptr notebook, notebookList) {
         Q_FOREACH (const Settings::CalendarInfo &calendarInfo, allCalendarInfo) {
             if (notebook->account() == mSettings.notebookId(calendarInfo.serverPath)) {
-                syncNotebookChanges(notebook, calendarInfo.serverPath);
+                NotebookSyncAgent *agent = new NotebookSyncAgent(mCalendar, mStorage, mNAManager, &mSettings, calendarInfo.serverPath, this);
+                connect(agent, SIGNAL(finished(int,QString)),
+                        this, SLOT(notebookSyncFinished(int,QString)));
+                mNotebookSyncAgents.append(agent);
+                agent->startQuickSync(notebook, lastSyncTime(), calendarIncidences);
                 break;
             }
         }
     }
+    if (mNotebookSyncAgents.isEmpty()) {
+        syncFinished(Buteo::SyncResults::INTERNAL_ERROR, "Could not find the notebooks for this account");
+    }
 }
 
-void CalDavClient::syncNotebookChanges(mKCal::Notebook::Ptr notebook, const QString &serverPath)
+void CalDavClient::clearAgents()
 {
     FUNCTION_CALL_TRACE;
 
-    if (!mStorage) {
-        syncFinished(Buteo::SyncResults::INTERNAL_ERROR, "mStorage not set");
+    for (int i=0; i<mNotebookSyncAgents.count(); i++) {
+        mNotebookSyncAgents[i]->deleteLater();
+    }
+    mNotebookSyncAgents.clear();
+}
+
+void CalDavClient::notebookSyncFinished(int errorCode, const QString &errorString)
+{
+    FUNCTION_CALL_TRACE;
+    LOG_CRITICAL("Notebook sync finished. Total agents:" << mNotebookSyncAgents.count());
+
+    if (errorCode != Buteo::SyncResults::NO_ERROR) {
+        syncFinished(errorCode, errorString);
         return;
     }
-
-    // we add 2 seconds to ensure that the timestamp doesn't
-    // fall prior to when the calendar db commit fs sync finalises.
-    KDateTime fromDate(lastSyncTime().addSecs(2));
-    LOG_DEBUG("\n\nLAST SYNC TIME = " << fromDate.toString() << "\n\n");
-
-    KCalCore::Incidence::List inserted;
-    KCalCore::Incidence::List modified;
-    KCalCore::Incidence::List deleted;
-    QString errorString;
-    if (!loadStorageChanges(notebook->uid(), fromDate, &inserted, &modified, &deleted, &errorString)) {
-        LOG_WARNING("Unable to load changes for calendar:" << serverPath);
-        syncFinished(Buteo::SyncResults::INTERNAL_ERROR, errorString);
-        return;
-    }
-    LOG_DEBUG("Changes: inserted = " << inserted.count()
-              << "modified = " << modified.count()
-              << "deleted = " << deleted.count());
-    if (inserted.isEmpty() && modified.isEmpty() && deleted.isEmpty()) {
-        // no local changes to send, just do a REPORT to pull updates from server
-        retrieveETags(serverPath);
-    } else {
-        for (int i=0; i<inserted.count(); i++) {
-            Put *put = new Put(mNAManager, &mSettings, this);
-            mRequests.insert(put);
-            connect(put, SIGNAL(finished()), this, SLOT(nonReportRequestFinished()));
-            put->createEvent(serverPath, inserted[i]);
-        }
-        for (int i=0; i<modified.count(); i++) {
-            Put *put = new Put(mNAManager, &mSettings, this);
-            mRequests.insert(put);
-            connect(put, SIGNAL(finished()), this, SLOT(nonReportRequestFinished()));
-            put->updateEvent(serverPath, modified[i]);
-        }
-        for (int i=0; i<deleted.count(); i++) {
-            Delete *del = new Delete(mNAManager, &mSettings, this);
-            mRequests.insert(del);
-            connect(del, SIGNAL(finished()), this, SLOT(nonReportRequestFinished()));
-            del->deleteEvent(serverPath, deleted[i]);
+    bool finished = true;
+    for (int i=0; i<mNotebookSyncAgents.count(); i++) {
+        if (!mNotebookSyncAgents[i]->isFinished()) {
+            finished = false;
+            break;
         }
     }
-}
-
-void CalDavClient::nonReportRequestFinished()
-{
-    FUNCTION_CALL_TRACE;
-
-    Request *request = qobject_cast<Request*>(sender());
-    if (!request) {
-        syncFinished(Buteo::SyncResults::INTERNAL_ERROR, QStringLiteral("Invalid request object"));
-        return;
-    }
-    mRequests.remove(request);
-    request->deleteLater();
-
-    if (request->errorCode() != Buteo::SyncResults::NO_ERROR) {
-        qWarning() << "Aborting sync," << request->command() << "failed!" << request->errorString();
-        syncFinished(Buteo::SyncResults::INTERNAL_ERROR, request->errorString());
-        return;
-    }
-    if (mRequests.isEmpty()) {
-        // now send a REPORT to fetch the latest data for each calendar
-        Q_FOREACH(const Settings::CalendarInfo &calendarInfo, mSettings.calendars()) {
-            retrieveETags(calendarInfo.serverPath);
-        }
-    }
-}
-
-void CalDavClient::retrieveETags(const QString &serverPath)
-{
-    FUNCTION_CALL_TRACE;
-
-    Report *report = new Report(mNAManager, &mSettings, mCalendar, mStorage, this);
-    mRequests.insert(report);
-    connect(report, SIGNAL(finished()), this, SLOT(reportRequestFinished()));
-    report->getAllETags(serverPath);
-}
-
-void CalDavClient::clearRequests()
-{
-    FUNCTION_CALL_TRACE;
-
-    QList<Request *> requests = mRequests.toList();
-    for (int i=0; i<requests.count(); i++) {
-        requests[i]->deleteLater();
-    }
-    mRequests.clear();
-}
-
-void CalDavClient::deleteIncidences(const KCalCore::Incidence::List &sourceList)
-{
-    FUNCTION_CALL_TRACE;
-
-    if (sourceList.isEmpty()) {
-        return;
-    }
-    // ExtendedCalendar::delete* methods only work for references provided by ExtendedCalendar
-    // (and not those from ExtendedStorage) so load these references here.
-    QDateTime dt = QDateTime::currentDateTime();
-    KCalCore::Incidence::List realIncidenceRefs = mCalendar->incidences(dt.addMonths(-12).date(), dt.addMonths(12).date());
-    QHash<QString, KCalCore::Incidence::Ptr> realIncidenceRefsMap;
-    for (int i=0; i<realIncidenceRefs.count(); i++) {
-        realIncidenceRefsMap.insert(realIncidenceRefs[i]->uid(), realIncidenceRefs[i]);
-    }
-    Q_FOREACH(const KCalCore::Incidence::Ptr &sourceIncidence, sourceList) {
-        if (realIncidenceRefsMap.contains(sourceIncidence->uid())) {
-            KCalCore::Incidence::Ptr realIncidenceRef = realIncidenceRefsMap.take(sourceIncidence->uid());
-            switch (realIncidenceRef->type()) {
-            case KCalCore::IncidenceBase::TypeEvent:
-                if (!mCalendar->deleteEvent(realIncidenceRef.staticCast<KCalCore::Event>())) {
-                    LOG_DEBUG("Unable to delete Event = " << realIncidenceRef->customProperty("buteo", "uri"));
-                }
-                break;
-            case KCalCore::IncidenceBase::TypeTodo:
-                if (!mCalendar->deleteTodo(realIncidenceRef.staticCast<KCalCore::Todo>())) {
-                    LOG_DEBUG("Unable to delete Todo = " << realIncidenceRef->customProperty("buteo", "uri"));
-                }
-                break;
-            case KCalCore::IncidenceBase::TypeJournal:
-                if (!mCalendar->deleteJournal(realIncidenceRef.staticCast<KCalCore::Journal>())) {
-                    LOG_DEBUG("Unable to delete Journal = " << realIncidenceRef->customProperty("buteo", "uri"));
-                }
-                break;
-            default:
-                break;
+    if (finished) {
+        for (int i=0; i<mNotebookSyncAgents.count(); i++) {
+            if (!mNotebookSyncAgents[i]->applyRemoteChanges()) {
+                syncFinished(Buteo::SyncResults::INTERNAL_ERROR, QStringLiteral("unable to write notebook changes"));
+                return;
             }
         }
-    }
-}
-
-void CalDavClient::reportRequestFinished()
-{
-    FUNCTION_CALL_TRACE;
-
-    Report *request = qobject_cast<Report*>(sender());
-    if (!request) {
-        syncFinished(Buteo::SyncResults::INTERNAL_ERROR, QStringLiteral("Invalid request object"));
-        return;
-    }
-    mRequests.remove(request);
-    request->deleteLater();
-    LOG_DEBUG("Report request finished. Requests remaining:" << mRequests.count());
-
-    mIncidencesToDelete += request->incidencesToDelete();
-
-    if (request->errorCode() != Buteo::SyncResults::NO_ERROR) {
-        syncFinished(request->errorCode(), request->errorString());
-        return;
-    }
-    if (mRequests.isEmpty()) {
-        deleteIncidences(mIncidencesToDelete);
-        mIncidencesToDelete.clear();
-
-        bool saved = mStorage->save();
-        if (saved) {
-            syncFinished(request->errorCode(), request->errorString());
+        if (mStorage->save()) {
+            for (int i=0; i<mNotebookSyncAgents.count(); i++) {
+                mNotebookSyncAgents[i]->finalize();
+            }
+            if (mSlowSync) {
+                // For the initial slow sync, set the lastSyncTime after the calendar data is
+                // written locally, and add two seconds to account for the db write delay.
+                mSyncStartTime = QDateTime::currentDateTime().toUTC().addSecs(2);
+                LOG_DEBUG("\n\n++++++++++++++ Slow sync mSyncStartTime:" << mSyncStartTime << "LAST SYNC:" << lastSyncTime());
+            }
+            syncFinished(errorCode, errorString);
         } else {
             syncFinished(Buteo::SyncResults::DATABASE_FAILURE, QStringLiteral("unable to save calendar storage"));
         }

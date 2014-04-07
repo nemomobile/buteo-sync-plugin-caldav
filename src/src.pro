@@ -2,7 +2,7 @@ TARGET = caldav-client
 TEMPLATE = lib
 
 QT       -= gui
-QT       += network dbus
+QT       += network dbus sql
 
 CONFIG += link_pkgconfig plugin debug console
 PKGCONFIG += buteosyncfw5 libsignon-qt5 accounts-qt5 signon-oauth2plugin \
@@ -17,7 +17,7 @@ QMAKE_CXXFLAGS = -Wall \
     -Wno-cast-align \
     -O2 -finline-functions
 
-DEFINES += BUTEOCALDAVPLUGIN_LIBRARY
+DEFINES += BUTEOCALDAVPLUGIN_LIBRARY BUTEO_ENABLE_DEBUG
 
 HEADERS += \
     caldavclient.h \
@@ -29,7 +29,10 @@ HEADERS += \
     settings.h \
     request.h \
     get.h \
-    authhandler.h
+    authhandler.h \
+    incidencehandler.h \
+    notebooksyncagent.h \
+    notebooksyncdatabase.h
 
 SOURCES += \
     caldavclient.cpp \
@@ -40,7 +43,10 @@ SOURCES += \
     settings.cpp \
     request.cpp \
     get.cpp \
-    authhandler.cpp
+    authhandler.cpp \
+    incidencehandler.cpp \
+    notebooksyncagent.cpp \
+    notebooksyncdatabase.cpp
 
 OTHER_FILES += \
     xmls/client/caldav.xml \

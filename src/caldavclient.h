@@ -27,6 +27,7 @@
 #include "buteo-caldav-plugin.h"
 #include "authhandler.h"
 #include "settings.h"
+#include "notebooksyncagent.h"
 
 #include <QList>
 #include <QSet>
@@ -135,8 +136,7 @@ public Q_SLOTS:
 private Q_SLOTS:
     bool start();
     void authenticationError();
-    void reportRequestFinished();
-    void nonReportRequestFinished();
+    void notebookSyncFinished(int errorCode, const QString &errorString);
 
 private:
     void startSlowSync();
@@ -146,38 +146,25 @@ private:
     bool initConfig();
     void closeConfig();
     void syncFinished(int minorErrorCode, const QString &message);
-    void clearRequests();
-    void retrieveETags(const QString &serverPath);
+    void clearAgents();
+    void deleteNotebooksForAccount(int accountId, mKCal::ExtendedCalendar::Ptr calendar, mKCal::ExtendedStorage::Ptr storage);
     QList<Settings::CalendarInfo> loadCalendars(Accounts::Account *account, Accounts::Service srv) const;
-
-    void syncNotebookChanges(mKCal::Notebook::Ptr notebook,
-                             const QString &serverPath);
-    bool loadStorageChanges(const QString &notebookUid,
-                            const KDateTime &fromDate,
-                            KCalCore::Incidence::List *inserted,
-                            KCalCore::Incidence::List *modified,
-                            KCalCore::Incidence::List *deleted,
-                            QString *error);
-    int removeCommonIncidences(KCalCore::Incidence::List *inserted,
-                               KCalCore::Incidence::List *deleted);
-    void deleteIncidences(const KCalCore::Incidence::List &sourceList);
-
 
     Buteo::SyncProfile::SyncDirection syncDirection();
     Buteo::SyncProfile::ConflictResolutionPolicy conflictResolutionPolicy();
 
-    QSet<Request *>             mRequests;
+    QList<NotebookSyncAgent *>  mNotebookSyncAgents;
     QNetworkAccessManager*      mNAManager;
     Accounts::Manager*          mManager;
     AuthHandler*                mAuth;
     mKCal::ExtendedCalendar::Ptr mCalendar;
     mKCal::ExtendedStorage::Ptr mStorage;
-    KCalCore::Incidence::List   mIncidencesToDelete;
     Buteo::SyncResults          mResults;
     Sync::SyncStatus            mSyncStatus;
     Buteo::SyncProfile::SyncDirection mSyncDirection;
     Buteo::SyncProfile::ConflictResolutionPolicy mConflictResPolicy;
     Settings                    mSettings;
+    QDateTime                   mSyncStartTime;
     bool                        mSlowSync;
 };
 
