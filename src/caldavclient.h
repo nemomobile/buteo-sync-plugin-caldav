@@ -42,6 +42,7 @@
 #include <Accounts/Manager>
 
 class QNetworkAccessManager;
+class CalDavCalendarDatabase;
 class Request;
 
 /*
@@ -136,6 +137,7 @@ public Q_SLOTS:
 private Q_SLOTS:
     bool start();
     void authenticationError();
+    void databaseWriteStatusChanged();
     void notebookSyncFinished(int errorCode, const QString &errorString);
 
 private:
@@ -157,6 +159,7 @@ private:
     QNetworkAccessManager*      mNAManager;
     Accounts::Manager*          mManager;
     AuthHandler*                mAuth;
+    CalDavCalendarDatabase*     mDatabase;
     mKCal::ExtendedCalendar::Ptr mCalendar;
     mKCal::ExtendedStorage::Ptr mStorage;
     Buteo::SyncResults          mResults;

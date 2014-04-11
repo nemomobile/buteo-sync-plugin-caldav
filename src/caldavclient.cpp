@@ -23,7 +23,8 @@
 
 #include "caldavclient.h"
 #include "notebooksyncagent.h"
-#include "notebooksyncdatabase.h"
+
+#include <caldavcalendardatabase.h>
 
 #include <extendedcalendar.h>
 #include <extendedstorage.h>
@@ -63,6 +64,7 @@ CalDavClient::CalDavClient(const QString& aPluginName,
     : ClientPlugin(aPluginName, aProfile, aCbInterface)
     , mManager(0)
     , mAuth(0)
+    , mDatabase(0)
     , mCalendar(0)
     , mStorage(0)
     , mSlowSync(true)
@@ -73,6 +75,8 @@ CalDavClient::CalDavClient(const QString& aPluginName,
 CalDavClient::~CalDavClient()
 {
     FUNCTION_CALL_TRACE;
+
+    delete mDatabase;
 }
 
 bool CalDavClient::init()
@@ -86,6 +90,8 @@ bool CalDavClient::init()
     }
 
     mNAManager = new QNetworkAccessManager(this);
+    mDatabase = new CalDavCalendarDatabase;
+    connect(mDatabase, SIGNAL(writeStatusChanged()), this, SLOT(databaseWriteStatusChanged()));
 
     if (initConfig()) {
         return true;
@@ -170,6 +176,10 @@ bool CalDavClient::cleanUp()
     // This function is called after the account has been deleted to allow the plugin to remove
     // all the notebooks associated with the account.
 
+    if (!mDatabase) {
+        mDatabase = new CalDavCalendarDatabase;
+    }
+
     QString accountIdString = iProfile.key(Buteo::KEY_ACCOUNT_ID);
     int accountId = accountIdString.toInt();
     if (accountId == 0) {
@@ -211,12 +221,14 @@ void CalDavClient::deleteNotebooksForAccount(int accountId, mKCal::ExtendedCalen
             } else {
                 LOG_WARNING("Unable to delete notebook:" << notebook->uid() << "for account:" << accountId);
             }
-            NotebookSyncDatabase::clearEntriesForNotebook(notebook->uid());
+            mDatabase->removeEntries(notebook->uid());
         }
     }
     LOG_DEBUG("Deleted" << deletedCount << "notebooks");
     if (deletedCount > 0 && !storage->save()) {
         LOG_CRITICAL("Unable to save calendar storage after deleting notebooks");
+    } else {
+        mDatabase->commit();
     }
 }
 
@@ -259,6 +271,11 @@ bool CalDavClient::initConfig()
 {
     FUNCTION_CALL_TRACE;
     LOG_DEBUG("Initiating config...");
+
+    if (!mDatabase->isValid()) {
+        LOG_CRITICAL("Invalid database!");
+        return false;
+    }
 
     if (!mManager) {
         mManager = new Accounts::Manager(this);
@@ -323,8 +340,17 @@ void CalDavClient::syncFinished(int minorErrorCode, const QString &message)
 
     clearAgents();
 
-    if (mSlowSync && minorErrorCode != Buteo::SyncResults::NO_ERROR) {
-        deleteNotebooksForAccount(mSettings.accountId(), mCalendar, mStorage);
+    if (mSlowSync) {
+        if (minorErrorCode == Buteo::SyncResults::NO_ERROR) {
+            // Set the lastSyncTime after the calendar data is
+            // written locally to the mkcal db.
+            mSyncStartTime = QDateTime::currentDateTime().toUTC().addSecs(2);
+            LOG_DEBUG("\n\n++++++++++++++ Slow sync mSyncStartTime:" << mSyncStartTime << "LAST SYNC:" << lastSyncTime());
+        } else {
+            if (mDatabase->writeStatus() != CalDavCalendarDatabase::Error) {
+                deleteNotebooksForAccount(mSettings.accountId(), mCalendar, mStorage);
+            }
+        }
     }
     if (mCalendar) {
         mCalendar->close();
@@ -396,7 +422,7 @@ void CalDavClient::startSlowSync()
     mSyncStartTime = QDateTime();
 
     Q_FOREACH (const Settings::CalendarInfo &calendarInfo, allCalendarInfo) {
-        NotebookSyncAgent *agent = new NotebookSyncAgent(mCalendar, mStorage, mNAManager, &mSettings, calendarInfo.serverPath, this);
+        NotebookSyncAgent *agent = new NotebookSyncAgent(mCalendar, mStorage, mDatabase, mNAManager, &mSettings, calendarInfo.serverPath, this);
         connect(agent, SIGNAL(finished(int,QString)),
                 this, SLOT(notebookSyncFinished(int,QString)));
         mNotebookSyncAgents.append(agent);
@@ -438,7 +464,7 @@ void CalDavClient::startQuickSync()
     Q_FOREACH (mKCal::Notebook::Ptr notebook, notebookList) {
         Q_FOREACH (const Settings::CalendarInfo &calendarInfo, allCalendarInfo) {
             if (notebook->account() == mSettings.notebookId(calendarInfo.serverPath)) {
-                NotebookSyncAgent *agent = new NotebookSyncAgent(mCalendar, mStorage, mNAManager, &mSettings, calendarInfo.serverPath, this);
+                NotebookSyncAgent *agent = new NotebookSyncAgent(mCalendar, mStorage, mDatabase, mNAManager, &mSettings, calendarInfo.serverPath, this);
                 connect(agent, SIGNAL(finished(int,QString)),
                         this, SLOT(notebookSyncFinished(int,QString)));
                 mNotebookSyncAgents.append(agent);
@@ -462,10 +488,26 @@ void CalDavClient::clearAgents()
     mNotebookSyncAgents.clear();
 }
 
+void CalDavClient::databaseWriteStatusChanged()
+{
+    FUNCTION_CALL_TRACE;
+
+    CalDavCalendarDatabase *db = qobject_cast<CalDavCalendarDatabase*>(sender());
+
+    if (db->writeStatus() == CalDavCalendarDatabase::Error) {
+        syncFinished(Buteo::SyncResults::DATABASE_FAILURE, QString("Unable to write to database"));
+    } else if (db->writeStatus() == CalDavCalendarDatabase::Finished) {
+        syncFinished(Buteo::SyncResults::NO_ERROR, QString());
+    }
+}
+
 void CalDavClient::notebookSyncFinished(int errorCode, const QString &errorString)
 {
     FUNCTION_CALL_TRACE;
     LOG_CRITICAL("Notebook sync finished. Total agents:" << mNotebookSyncAgents.count());
+
+    NotebookSyncAgent *agent = qobject_cast<NotebookSyncAgent*>(sender());
+    agent->disconnect(this);
 
     if (errorCode != Buteo::SyncResults::NO_ERROR) {
         syncFinished(errorCode, errorString);
@@ -489,13 +531,19 @@ void CalDavClient::notebookSyncFinished(int errorCode, const QString &errorStrin
             for (int i=0; i<mNotebookSyncAgents.count(); i++) {
                 mNotebookSyncAgents[i]->finalize();
             }
-            if (mSlowSync) {
-                // For the initial slow sync, set the lastSyncTime after the calendar data is
-                // written locally, and add two seconds to account for the db write delay.
-                mSyncStartTime = QDateTime::currentDateTime().toUTC().addSecs(2);
-                LOG_DEBUG("\n\n++++++++++++++ Slow sync mSyncStartTime:" << mSyncStartTime << "LAST SYNC:" << lastSyncTime());
+            LOG_DEBUG("Any database changes to write? (including clearing of entries)" << mDatabase->hasChanges());
+            if (mDatabase->hasChanges()) {
+                // commit and wait for database changes to be written
+                mDatabase->commit();
+                mDatabase->wait();
+                if (mDatabase->writeStatus() == CalDavCalendarDatabase::Error) {
+                    syncFinished(Buteo::SyncResults::DATABASE_FAILURE, QString("Unable to write to database"));
+                } else if (mDatabase->writeStatus() == CalDavCalendarDatabase::Finished) {
+                    syncFinished(Buteo::SyncResults::NO_ERROR, QString());
+                }
+            } else {
+                syncFinished(errorCode, errorString);
             }
-            syncFinished(errorCode, errorString);
         } else {
             syncFinished(Buteo::SyncResults::DATABASE_FAILURE, QStringLiteral("unable to save calendar storage"));
         }

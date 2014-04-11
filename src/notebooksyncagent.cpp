@@ -21,13 +21,14 @@
  *
  */
 #include "notebooksyncagent.h"
-#include "notebooksyncdatabase.h"
 #include "incidencehandler.h"
 #include "settings.h"
 #include "report.h"
 #include "put.h"
 #include "delete.h"
 #include "reader.h"
+
+#include <caldavcalendardatabase.h>
 
 #include <LogMacros.h>
 #include <SyncResults.h>
@@ -43,19 +44,20 @@
 
 #include <QDebug>
 
-#define BUTEO_ENABLE_DEBUG
 
+#define BUTEO_ENABLE_DEBUG
 #define NOTEBOOK_FUNCTION_CALL_TRACE LOG_CRITICAL(Q_FUNC_INFO << (mNotebook ? mNotebook->account() : ""))
 
 NotebookSyncAgent::NotebookSyncAgent(mKCal::ExtendedCalendar::Ptr calendar,
                                      mKCal::ExtendedStorage::Ptr storage,
+                                     CalDavCalendarDatabase *database,
                                      QNetworkAccessManager *networkAccessManager,
                                      Settings *settings,
                                      const QString &calendarServerPath,
                                      QObject *parent)
     : QObject(parent)
     , mNAManager(networkAccessManager)
-    , mSyncDatabase(0)
+    , mDatabase(database)
     , mSettings(settings)
     , mCalendar(calendar)
     , mStorage(storage)
@@ -71,7 +73,6 @@ NotebookSyncAgent::~NotebookSyncAgent()
     NOTEBOOK_FUNCTION_CALL_TRACE;
 
     clearRequests();
-    delete mSyncDatabase;
 }
 
 void NotebookSyncAgent::abort()
@@ -120,11 +121,6 @@ void NotebookSyncAgent::startSlowSync(const QString &notebookName,
                      + mNotebook->uid() + " for account/calendar " + mNotebook->account());
         return;
     }
-    mSyncDatabase = NotebookSyncDatabase::open(mNotebook->uid());
-    if (!mSyncDatabase->isOpen()) {
-        emitFinished(Buteo::SyncResults::DATABASE_FAILURE, QStringLiteral("unable to open notebook sync database"));
-        return;
-    }
     LOG_DEBUG("NOTEBOOK created" << mNotebook->uid() << "account:" << mNotebook->account());
 
     Report *report = new Report(mNAManager, mSettings);
@@ -150,11 +146,6 @@ void NotebookSyncAgent::startQuickSync(mKCal::Notebook::Ptr notebook,
                                        const KCalCore::Incidence::List &allCalendarIncidences)
 {
     NOTEBOOK_FUNCTION_CALL_TRACE;
-    mSyncDatabase = NotebookSyncDatabase::open(notebook->uid());
-    if (!mSyncDatabase->isOpen()) {
-        emitFinished(Buteo::SyncResults::DATABASE_FAILURE, QStringLiteral("unable to open notebook sync database"));
-        return;
-    }
     mSyncMode = QuickSync;
     mNotebook = notebook;
     mCalendarIncidencesBeforeSync = allCalendarIncidences;
@@ -167,24 +158,23 @@ void NotebookSyncAgent::finalize()
 {
     NOTEBOOK_FUNCTION_CALL_TRACE;
 
-    if (!mSyncDatabase || !mSyncDatabase->isOpen()) {
-        LOG_CRITICAL("NotebookSyncDatabase not open!");
-        return;
-    }
+    LOG_DEBUG("Writing" << mNewRemoteIncidenceIds.count() << "insertions,"
+              << mModifiedIncidenceICalData.count() << "modifications"
+              << mIncidenceUidsToDelete.count() << "deletions");
 
-    mSyncDatabase->removeLastSyncAdditions();
+    mDatabase->removeEntries(mNotebook->uid());
+
     if (mNewRemoteIncidenceIds.count()) {
-        mSyncDatabase->writeLastSyncAdditions(mNewRemoteIncidenceIds);
+        mDatabase->insertAdditions(mNotebook->uid(), mNewRemoteIncidenceIds);
+        mNewRemoteIncidenceIds.clear();
     }
-
-    mSyncDatabase->removeLastSyncModifications();
     if (mModifiedIncidenceICalData.count()) {
-        mSyncDatabase->writeLastSyncModifications(mModifiedIncidenceICalData);
+        mDatabase->insertModifications(mNotebook->uid(), mModifiedIncidenceICalData);
+        mModifiedIncidenceICalData.clear();
     }
-
-    mSyncDatabase->removeLastSyncDeletions();
     if (mIncidenceUidsToDelete.count()) {
-        mSyncDatabase->writeLastSyncDeletions(mIncidenceUidsToDelete);
+        mDatabase->insertDeletions(mNotebook->uid(), mIncidenceUidsToDelete);
+        mIncidenceUidsToDelete.clear();
     }
 }
 
@@ -311,12 +301,12 @@ bool NotebookSyncAgent::loadLocalChanges(const QDateTime &fromDate,
 
 bool NotebookSyncAgent::discardLastSyncRemoteAdditions(KCalCore::Incidence::List *sourceList)
 {
-    if (!mSyncDatabase || !mNotebook) {
-        LOG_CRITICAL("no database or notebook");
+    if (!mNotebook) {
+        LOG_CRITICAL("no notebook");
         return false;
     }
     bool ok = false;
-    QStringList additions = mSyncDatabase->lastSyncAdditions(&ok);
+    QStringList additions = mDatabase->additions(mNotebook->uid(), &ok);
     if (!ok) {
         return false;
     }
@@ -334,12 +324,12 @@ bool NotebookSyncAgent::discardLastSyncRemoteAdditions(KCalCore::Incidence::List
 
 bool NotebookSyncAgent::discardLastSyncRemoteModifications(KCalCore::Incidence::List *sourceList)
 {
-    if (!mSyncDatabase || !mNotebook) {
-        LOG_CRITICAL("no database or notebook");
+    if (!mNotebook) {
+        LOG_CRITICAL("no notebook");
         return false;
     }
     bool ok = false;
-    QHash<QString,QString> modifications = mSyncDatabase->lastSyncModifications(&ok);
+    QHash<QString,QString> modifications = mDatabase->modifications(mNotebook->uid(), &ok);
     if (!ok) {
         return false;
     }
@@ -371,12 +361,12 @@ bool NotebookSyncAgent::discardLastSyncRemoteModifications(KCalCore::Incidence::
 
 bool NotebookSyncAgent::discardLastSyncRemoteDeletions(KCalCore::Incidence::List *sourceList)
 {
-    if (!mSyncDatabase || !mNotebook) {
-        LOG_CRITICAL("no database or notebook");
+    if (!mNotebook) {
+        LOG_CRITICAL("no notebook");
         return false;
     }
     bool ok = false;
-    QStringList deletions = mSyncDatabase->lastSyncDeletions(&ok);
+    QStringList deletions = mDatabase->deletions(mNotebook->uid(), &ok);
     if (!ok) {
         return false;
     }
@@ -466,6 +456,9 @@ void NotebookSyncAgent::emitFinished(int minorErrorCode, const QString &message)
 {
     NOTEBOOK_FUNCTION_CALL_TRACE;
 
+    if (mFinished) {
+        return;
+    }
     mFinished = true;
     clearRequests();
 

@@ -33,7 +33,7 @@
 class QNetworkAccessManager;
 class Request;
 class Settings;
-class NotebookSyncDatabase;
+class CalDavCalendarDatabase;
 
 class NotebookSyncAgent : public QObject
 {
@@ -47,6 +47,7 @@ public:
 
     explicit NotebookSyncAgent(mKCal::ExtendedCalendar::Ptr calendar,
                                mKCal::ExtendedStorage::Ptr storage,
+                               CalDavCalendarDatabase *database,
                                QNetworkAccessManager *networkAccessManager,
                                Settings *settings,
                                const QString &calendarServerPath,
@@ -101,7 +102,7 @@ private:
     QStringList mIncidenceUidsToDelete;
     QSet<Request *> mRequests;
     QNetworkAccessManager* mNAManager;
-    NotebookSyncDatabase* mSyncDatabase;
+    CalDavCalendarDatabase* mDatabase;
     Settings *mSettings;
     mKCal::ExtendedCalendar::Ptr mCalendar;
     mKCal::ExtendedStorage::Ptr mStorage;

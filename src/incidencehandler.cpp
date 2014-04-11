@@ -142,7 +142,7 @@ void IncidenceHandler::copyIncidenceProperties(KCalCore::Incidence::Ptr dest, co
     dest->setDtStart(src->dtStart());
 
     dest->clearAttendees();
-    // TODO investigate mkcal errors in adding attendees
+    // TODO investigate inconsistencies in read vs written attendee data
 //    Q_FOREACH (const KCalCore::Attendee::Ptr &attendee, src->attendees()) {
 //        dest->addAttendee(attendee);
 //    }

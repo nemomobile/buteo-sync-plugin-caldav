@@ -2,11 +2,11 @@ TARGET = caldav-client
 TEMPLATE = lib
 
 QT       -= gui
-QT       += network dbus sql
+QT       += network dbus
 
 CONFIG += link_pkgconfig plugin debug console
 PKGCONFIG += buteosyncfw5 libsignon-qt5 accounts-qt5 signon-oauth2plugin \
-             libsailfishkeyprovider libkcalcoren-qt5 libmkcal-qt5
+             libsailfishkeyprovider libkcalcoren-qt5 libmkcal-qt5 socialcache
 
 VER_MAJ = 0
 VER_MIN = 1
@@ -31,8 +31,7 @@ HEADERS += \
     get.h \
     authhandler.h \
     incidencehandler.h \
-    notebooksyncagent.h \
-    notebooksyncdatabase.h
+    notebooksyncagent.h
 
 SOURCES += \
     caldavclient.cpp \
@@ -45,8 +44,7 @@ SOURCES += \
     get.cpp \
     authhandler.cpp \
     incidencehandler.cpp \
-    notebooksyncagent.cpp \
-    notebooksyncdatabase.cpp
+    notebooksyncagent.cpp
 
 OTHER_FILES += \
     xmls/client/caldav.xml \

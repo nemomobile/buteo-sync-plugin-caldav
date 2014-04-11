@@ -19,6 +19,7 @@ BuildRequires:  pkgconfig(libkcalcoren-qt5)
 BuildRequires:  pkgconfig(buteosyncfw5)
 BuildRequires:  pkgconfig(accounts-qt5)
 BuildRequires:  pkgconfig(signon-oauth2plugin)
+BuildRequires:  pkgconfig(socialcache) >= 0.0.20
 Requires: buteo-syncfw-qt5-msyncd
 Requires: mkcal-qt5
 
