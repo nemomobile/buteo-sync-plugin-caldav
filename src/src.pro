@@ -6,7 +6,7 @@ QT       += network dbus
 
 CONFIG += link_pkgconfig plugin debug console
 PKGCONFIG += buteosyncfw5 libsignon-qt5 accounts-qt5 signon-oauth2plugin \
-             libsailfishkeyprovider libkcalcoren-qt5 libmkcal-qt5
+             libsailfishkeyprovider libkcalcoren-qt5 libmkcal-qt5 socialcache
 
 VER_MAJ = 0
 VER_MIN = 1
@@ -17,7 +17,7 @@ QMAKE_CXXFLAGS = -Wall \
     -Wno-cast-align \
     -O2 -finline-functions
 
-DEFINES += BUTEOCALDAVPLUGIN_LIBRARY
+DEFINES += BUTEOCALDAVPLUGIN_LIBRARY BUTEO_ENABLE_DEBUG
 
 HEADERS += \
     caldavclient.h \
@@ -29,7 +29,9 @@ HEADERS += \
     settings.h \
     request.h \
     get.h \
-    authhandler.h
+    authhandler.h \
+    incidencehandler.h \
+    notebooksyncagent.h
 
 SOURCES += \
     caldavclient.cpp \
@@ -40,7 +42,9 @@ SOURCES += \
     settings.cpp \
     request.cpp \
     get.cpp \
-    authhandler.cpp
+    authhandler.cpp \
+    incidencehandler.cpp \
+    notebooksyncagent.cpp
 
 OTHER_FILES += \
     xmls/client/caldav.xml \
