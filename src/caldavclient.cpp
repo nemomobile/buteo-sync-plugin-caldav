@@ -42,8 +42,6 @@
 #include <ProfileEngineDefs.h>
 #include <ProfileManager.h>
 
-#define BUTEO_ENABLE_DEBUG
-
 #define KEY_ACCOUNT_SERVICE_NAME "account_service_name"
 
 extern "C" CalDavClient* createPlugin(const QString& aPluginName,

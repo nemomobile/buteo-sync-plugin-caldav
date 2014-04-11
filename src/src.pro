@@ -17,7 +17,7 @@ QMAKE_CXXFLAGS = -Wall \
     -Wno-cast-align \
     -O2 -finline-functions
 
-DEFINES += BUTEOCALDAVPLUGIN_LIBRARY BUTEO_ENABLE_DEBUG
+DEFINES += BUTEOCALDAVPLUGIN_LIBRARY
 
 HEADERS += \
     caldavclient.h \

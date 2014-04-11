@@ -40,12 +40,8 @@
 #include <journal.h>
 #include <attendee.h>
 
-#include <KUrl>
-
 #include <QDebug>
 
-
-#define BUTEO_ENABLE_DEBUG
 #define NOTEBOOK_FUNCTION_CALL_TRACE LOG_CRITICAL(Q_FUNC_INFO << (mNotebook ? mNotebook->account() : ""))
 
 NotebookSyncAgent::NotebookSyncAgent(mKCal::ExtendedCalendar::Ptr calendar,
