@@ -32,13 +32,42 @@
 
 #include <incidence.h>
 
+static const QString DateTimeFormat = QStringLiteral("yyyyMMddTHHmmss");
+static const QString DateTimeFormatUTC = DateTimeFormat + QStringLiteral("Z");
+
+static QString dateTimeToString(const QDateTime &dt)
+{
+    if (dt.timeSpec() == Qt::UTC) {
+        return dt.toString(DateTimeFormatUTC);
+    } else {
+        return dt.toString(DateTimeFormat);
+    }
+}
+
+static QByteArray timeRangeFilterXml(const QDateTime &fromDateTime, const QDateTime &toDateTime)
+{
+    QByteArray xml;
+    if (fromDateTime.isValid() || toDateTime.isValid()) {
+        xml = "<c:comp-filter name=\"VEVENT\"> <c:time-range ";
+        if (fromDateTime.isValid()) {
+            xml += "start=\"" + dateTimeToString(fromDateTime) + "\" ";
+        }
+        if (toDateTime.isValid()) {
+            xml += "end=\"" + dateTimeToString(toDateTime) + "\" ";
+        }
+        xml += " /></c:comp-filter>";
+
+    }
+    return xml;
+}
+
 Report::Report(QNetworkAccessManager *manager, Settings *settings, QObject *parent)
     : Request(manager, settings, "REPORT", parent)
 {
     FUNCTION_CALL_TRACE;
 }
 
-void Report::getAllEvents(const QString &serverPath)
+void Report::getAllEvents(const QString &serverPath, const QDateTime &fromDateTime, const QDateTime &toDateTime)
 {
     FUNCTION_CALL_TRACE;
     mServerPath = serverPath;
@@ -49,11 +78,23 @@ void Report::getAllEvents(const QString &serverPath)
     request.setRawHeader("Prefer", "return-minimal");
     request.setHeader(QNetworkRequest::ContentTypeHeader, "application/xml; charset=utf-8");
 
+    QByteArray requestData = \
+            "<c:calendar-query xmlns:d=\"DAV:\" xmlns:c=\"urn:ietf:params:xml:ns:caldav\">" \
+                "<d:prop>" \
+                    "<d:getetag />"\
+                    "<c:calendar-data />" \
+                "</d:prop>"
+                "<c:filter>" \
+                    "<c:comp-filter name=\"VCALENDAR\">";
+    if (fromDateTime.isValid() || toDateTime.isValid()) {
+        requestData.append(timeRangeFilterXml(fromDateTime, toDateTime));
+    }
+    requestData += \
+                    "</c:comp-filter>" \
+                "</c:filter>" \
+            "</c:calendar-query>";
     QBuffer *buffer = new QBuffer(this);
-    buffer->setData("<c:calendar-query xmlns:d=\"DAV:\" xmlns:c=\"urn:ietf:params:xml:ns:caldav\">" \
-                    "<d:prop> <d:getetag /> <c:calendar-data /> </d:prop>"       \
-                    "<c:filter> <c:comp-filter name=\"VCALENDAR\" /> </c:filter>" \
-                    "</c:calendar-query>");
+    buffer->setData(requestData);
     QNetworkReply *reply = mNAManager->sendCustomRequest(request, REQUEST_TYPE.toLatin1(), buffer);
     debugRequest(request, buffer->buffer());
     connect(reply, SIGNAL(finished()), this, SLOT(processEvents()));
@@ -61,7 +102,7 @@ void Report::getAllEvents(const QString &serverPath)
             this, SLOT(slotSslErrors(QList<QSslError>)));
 }
 
-void Report::getAllETags(const QString &serverPath, const KCalCore::Incidence::List &currentLocalIncidences)
+void Report::getAllETags(const QString &serverPath, const KCalCore::Incidence::List &currentLocalIncidences, const QDateTime &fromDateTime, const QDateTime &toDateTime)
 {
     FUNCTION_CALL_TRACE;
     mServerPath = serverPath;
@@ -73,12 +114,22 @@ void Report::getAllETags(const QString &serverPath, const KCalCore::Incidence::L
     request.setRawHeader("Prefer", "return-minimal");
     request.setHeader(QNetworkRequest::ContentTypeHeader, "application/xml; charset=utf-8");
 
+    QByteArray requestData = \
+            "<c:calendar-query xmlns:d=\"DAV:\" xmlns:c=\"urn:ietf:params:xml:ns:caldav\">" \
+                "<d:prop>" \
+                    "<d:getetag />"\
+                "</d:prop>"
+                "<c:filter>" \
+                    "<c:comp-filter name=\"VCALENDAR\">";
+    if (fromDateTime.isValid() || toDateTime.isValid()) {
+        requestData.append(timeRangeFilterXml(fromDateTime, toDateTime));
+    }
+    requestData += \
+                    "</c:comp-filter>" \
+                "</c:filter>" \
+            "</c:calendar-query>";
     QBuffer *buffer = new QBuffer(this);
-    buffer->setData("<c:calendar-query xmlns:d=\"DAV:\" xmlns:c=\"urn:ietf:params:xml:ns:caldav\">" \
-                    "<d:prop> <d:getetag /> </d:prop> " \
-                    "<c:filter> <c:comp-filter name=\"VCALENDAR\" > " \
-                    "</c:comp-filter> </c:filter>" \
-                    "</c:calendar-query> ");
+    buffer->setData(requestData);
     QNetworkReply *reply = mNAManager->sendCustomRequest(request, REQUEST_TYPE.toLatin1(), buffer);
     debugRequest(request, buffer->buffer());
 
