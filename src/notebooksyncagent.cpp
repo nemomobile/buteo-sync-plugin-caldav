@@ -42,6 +42,7 @@
 
 #include <QDebug>
 
+
 #define NOTEBOOK_FUNCTION_CALL_TRACE LOG_CRITICAL(Q_FUNC_INFO << (mNotebook ? mNotebook->account() : ""))
 
 NotebookSyncAgent::NotebookSyncAgent(mKCal::ExtendedCalendar::Ptr calendar,
@@ -101,7 +102,9 @@ void NotebookSyncAgent::startSlowSync(const QString &notebookName,
                                       const QString &notebookAccountId,
                                       const QString &pluginName,
                                       const QString &syncProfile,
-                                      const QString &color)
+                                      const QString &color,
+                                      const QDateTime &fromDateTime,
+                                      const QDateTime &toDateTime)
 {
     NOTEBOOK_FUNCTION_CALL_TRACE;
 
@@ -122,7 +125,7 @@ void NotebookSyncAgent::startSlowSync(const QString &notebookName,
     Report *report = new Report(mNAManager, mSettings);
     mRequests.insert(report);
     connect(report, SIGNAL(finished()), this, SLOT(reportRequestFinished()));
-    report->getAllEvents(mServerPath);
+    report->getAllEvents(mServerPath, fromDateTime, toDateTime);
 }
 
 /*
@@ -139,7 +142,9 @@ void NotebookSyncAgent::startSlowSync(const QString &notebookName,
  */
 void NotebookSyncAgent::startQuickSync(mKCal::Notebook::Ptr notebook,
                                        const QDateTime &changesSinceDate,
-                                       const KCalCore::Incidence::List &allCalendarIncidences)
+                                       const KCalCore::Incidence::List &allCalendarIncidences,
+                                       const QDateTime &fromDateTime,
+                                       const QDateTime &toDateTime)
 {
     NOTEBOOK_FUNCTION_CALL_TRACE;
     mSyncMode = QuickSync;
@@ -147,7 +152,7 @@ void NotebookSyncAgent::startQuickSync(mKCal::Notebook::Ptr notebook,
     mCalendarIncidencesBeforeSync = allCalendarIncidences;
     mChangesSinceDate = changesSinceDate;
 
-    fetchRemoteChanges();
+    fetchRemoteChanges(fromDateTime, toDateTime);
 }
 
 void NotebookSyncAgent::finalize()
@@ -179,7 +184,7 @@ bool NotebookSyncAgent::isFinished() const
     return mFinished;
 }
 
-void NotebookSyncAgent::fetchRemoteChanges()
+void NotebookSyncAgent::fetchRemoteChanges(const QDateTime &fromDateTime, const QDateTime &toDateTime)
 {
     NOTEBOOK_FUNCTION_CALL_TRACE;
 
@@ -197,7 +202,7 @@ void NotebookSyncAgent::fetchRemoteChanges()
     Report *report = new Report(mNAManager, mSettings);
     mRequests.insert(report);
     connect(report, SIGNAL(finished()), this, SLOT(reportRequestFinished()));
-    report->getAllETags(mServerPath, storageIncidenceList);
+    report->getAllETags(mServerPath, storageIncidenceList, fromDateTime, toDateTime);
 }
 
 void NotebookSyncAgent::sendLocalChanges()
@@ -419,6 +424,7 @@ void NotebookSyncAgent::reportRequestFinished()
 
     if (report->errorCode() == Buteo::SyncResults::NO_ERROR) {
         mReceivedCalendarResources = report->receivedCalendarResources();
+        LOG_DEBUG("Received" << mReceivedCalendarResources.count() << "calendar resources");
         if (mSyncMode == QuickSync) {
             mIncidenceUidsToDelete = report->localIncidenceUidsNotOnServer();
             sendLocalChanges();

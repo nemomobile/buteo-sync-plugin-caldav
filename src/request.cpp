@@ -86,6 +86,9 @@ void Request::slotSslErrors(QList<QSslError> errors)
 
 void Request::finishedWithError(int minorCode, const QString &errorString)
 {
+    if (minorCode != Buteo::SyncResults::NO_ERROR) {
+        LOG_CRITICAL(REQUEST_TYPE << "request failed." << minorCode << errorString);
+    }
     mMinorCode = minorCode;
     mErrorString = errorString;
     emit finished();

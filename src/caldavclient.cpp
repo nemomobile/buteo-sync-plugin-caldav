@@ -401,6 +401,16 @@ Buteo::SyncResults CalDavClient::getSyncResults() const
     return mResults;
 }
 
+void CalDavClient::getSyncDateRange(const QDateTime &sourceDate, QDateTime *fromDateTime, QDateTime *toDateTime)
+{
+    if (!fromDateTime || !toDateTime) {
+        LOG_CRITICAL("fromDate or toDate is invalid");
+        return;
+    }
+    *fromDateTime = sourceDate.addMonths(-6);
+    *toDateTime = sourceDate.addMonths(12);
+}
+
 void CalDavClient::startSlowSync()
 {
     FUNCTION_CALL_TRACE;
@@ -418,6 +428,9 @@ void CalDavClient::startSlowSync()
     }
 
     mSyncStartTime = QDateTime();
+    QDateTime fromDateTime;
+    QDateTime toDateTime;
+    getSyncDateRange(QDateTime::currentDateTime().toUTC(), &fromDateTime, &toDateTime);
 
     Q_FOREACH (const Settings::CalendarInfo &calendarInfo, allCalendarInfo) {
         NotebookSyncAgent *agent = new NotebookSyncAgent(mCalendar, mStorage, mDatabase, mNAManager, &mSettings, calendarInfo.serverPath, this);
@@ -428,7 +441,9 @@ void CalDavClient::startSlowSync()
                              mSettings.notebookId(calendarInfo.serverPath),
                              getPluginName(),
                              getProfileName(),
-                             calendarInfo.color);
+                             calendarInfo.color,
+                             fromDateTime,
+                             toDateTime);
     }
 }
 
@@ -451,13 +466,14 @@ void CalDavClient::startQuickSync()
     mSyncStartTime = QDateTime::currentDateTime().toUTC();
     LOG_DEBUG("\n\n++++++++++++++ mSyncStartTime:" << mSyncStartTime << "LAST SYNC:" << lastSyncTime());
 
-    QDate fromDate = mSyncStartTime.addMonths(-6).date();
-    QDate toDate = mSyncStartTime.addMonths(12).date();
-    if (!mStorage->load(fromDate, toDate)) {
+    QDateTime fromDateTime;
+    QDateTime toDateTime;
+    getSyncDateRange(mSyncStartTime, &fromDateTime, &toDateTime);
+    if (!mStorage->load(fromDateTime.date(), toDateTime.date())) {
         syncFinished(Buteo::SyncResults::DATABASE_FAILURE, "unable to load calendar storage");
         return;
     }
-    KCalCore::Incidence::List calendarIncidences = mCalendar->incidences(fromDate, toDate);
+    KCalCore::Incidence::List calendarIncidences = mCalendar->incidences(fromDateTime.date(), toDateTime.date());
     mKCal::Notebook::List notebookList = mStorage->notebooks();
     Q_FOREACH (mKCal::Notebook::Ptr notebook, notebookList) {
         Q_FOREACH (const Settings::CalendarInfo &calendarInfo, allCalendarInfo) {
@@ -466,7 +482,7 @@ void CalDavClient::startQuickSync()
                 connect(agent, SIGNAL(finished(int,QString)),
                         this, SLOT(notebookSyncFinished(int,QString)));
                 mNotebookSyncAgents.append(agent);
-                agent->startQuickSync(notebook, lastSyncTime(), calendarIncidences);
+                agent->startQuickSync(notebook, lastSyncTime(), calendarIncidences, fromDateTime, toDateTime);
                 break;
             }
         }

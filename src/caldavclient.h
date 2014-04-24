@@ -150,6 +150,7 @@ private:
     void syncFinished(int minorErrorCode, const QString &message);
     void clearAgents();
     void deleteNotebooksForAccount(int accountId, mKCal::ExtendedCalendar::Ptr calendar, mKCal::ExtendedStorage::Ptr storage);
+    void getSyncDateRange(const QDateTime &sourceDate, QDateTime *fromDateTime, QDateTime *toDateTime);
     QList<Settings::CalendarInfo> loadCalendars(Accounts::Account *account, Accounts::Service srv) const;
 
     Buteo::SyncProfile::SyncDirection syncDirection();

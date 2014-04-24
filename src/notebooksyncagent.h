@@ -58,10 +58,15 @@ public:
                        const QString &notebookAccountId,
                        const QString &pluginName,
                        const QString &syncProfile,
-                       const QString &color);
+                       const QString &color,
+                       const QDateTime &fromDateTime,
+                       const QDateTime &toDateTime);
+
     void startQuickSync(mKCal::Notebook::Ptr notebook,
                         const QDateTime &changesSinceDate,
-                        const KCalCore::Incidence::List &allCalendarIncidences);
+                        const KCalCore::Incidence::List &allCalendarIncidences,
+                        const QDateTime &fromDateTime,
+                        const QDateTime &toDateTime);
 
     void abort();
     bool applyRemoteChanges();
@@ -80,7 +85,7 @@ private:
     void clearRequests();
     void emitFinished(int minorErrorCode, const QString &message);
 
-    void fetchRemoteChanges();
+    void fetchRemoteChanges(const QDateTime &fromDateTime, const QDateTime &toDateTime);
     bool updateIncidences(const QList<Reader::CalendarResource> &resources);
     bool deleteIncidences(const QStringList &incidenceUids);
 
