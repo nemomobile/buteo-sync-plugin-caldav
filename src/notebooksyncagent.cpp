@@ -415,6 +415,7 @@ bool NotebookSyncAgent::discardRemoteChanges(KCalCore::Incidence::List *localIns
     }
     for (KCalCore::Incidence::List::iterator it = localDeleted->begin(); it != localDeleted->end();) {
         const QString &uid = (*it)->uid();
+        mLocalDeletedUids.insert(uid);
         if (remoteDeletedIncidences.contains(uid) || deletions.indexOf(uid) >= 0) {
             LOG_DEBUG("Discarding deletion" << uid);
             it = localDeleted->erase(it);
@@ -529,6 +530,10 @@ bool NotebookSyncAgent::updateIncidences(const QList<Reader::CalendarResource> &
 
     for (int i=0; i<resources.count(); i++) {
         const Reader::CalendarResource &resource = resources.at(i);
+        if (mLocalDeletedUids.contains(Reader::hrefToUid(resource.href))) {
+            LOG_DEBUG("Ignore incidence already deleted locally:" << resource.href);
+            continue;
+        }
         KCalCore::ICalFormat iCalFormat;
         KCalCore::Incidence::Ptr newIncidence = iCalFormat.fromString(resource.iCalData);
         if (newIncidence.isNull()) {
