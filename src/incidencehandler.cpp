@@ -24,6 +24,8 @@
 #include "incidencehandler.h"
 
 #include <QDebug>
+#include <QBuffer>
+#include <QDataStream>
 
 IncidenceHandler::IncidenceHandler()
 {
@@ -33,10 +35,7 @@ IncidenceHandler::~IncidenceHandler()
 {
 }
 
-/*
-    This is not exactly the same thing as checking whether two incidences are equal, because this only
-    checks the fields that are updated by copyIncidenceProperties().
- */
+// Checks whether a specific set of properties are equal.
 bool IncidenceHandler::copiedPropertiesAreEqual(const KCalCore::Incidence::Ptr &a, const KCalCore::Incidence::Ptr &b)
 {
     if (!a || !b) {
@@ -132,8 +131,19 @@ void IncidenceHandler::copyIncidenceProperties(KCalCore::Incidence::Ptr dest, co
         return;
     }
 
-    // Don't change created and lastModified properties as that affects mkcal
-    // calculations for when the incidence was added and modified in the db.
+    KDateTime origCreated = dest->created();
+    KDateTime origLastModified = dest->lastModified();
+
+    // Recurrences need to be copied through serialization, else they are not recreated.
+    dest->clearRecurrence();
+    QBuffer buffer;
+    buffer.open(QBuffer::ReadWrite);
+    QDataStream out(&buffer);
+    out << *src.data();
+    QDataStream in(&buffer);
+    buffer.seek(0);
+    in >> *dest.data();
+
     dest->setAllDay(src->allDay());
     dest->setDuration(src->duration());
     dest->setHasDuration(src->hasDuration());
@@ -178,47 +188,26 @@ void IncidenceHandler::copyIncidenceProperties(KCalCore::Incidence::Ptr dest, co
         dest->addAttachment(attachment);
     }
 
-    dest->clearRecurrence();
-    dest->setRecurrenceId(src->recurrenceId());
+    // Don't change created and lastModified properties as that affects mkcal
+    // calculations for when the incidence was added and modified in the db.
+    dest->setCreated(origCreated);
+    dest->setLastModified(origLastModified);
 
-    switch (dest->type()) {
-    case KCalCore::IncidenceBase::TypeEvent:
-        copyEventProperties(dest.staticCast<KCalCore::Event>(), src.staticCast<KCalCore::Event>());
-        break;
-    case KCalCore::IncidenceBase::TypeTodo:
-        copyTodoProperties(dest.staticCast<KCalCore::Todo>(), src.staticCast<KCalCore::Todo>());
-        break;
-    case KCalCore::IncidenceBase::TypeJournal:
-        copyJournalProperties(dest.staticCast<KCalCore::Journal>(), src.staticCast<KCalCore::Journal>());
-        break;
-    case KCalCore::IncidenceBase::TypeFreeBusy:
-    case KCalCore::IncidenceBase::TypeUnknown:
-        qWarning() << "Unsupported incidence type:" << dest->type();
-        break;
+    prepareIncidenceProperties(dest);
+}
+
+void IncidenceHandler::prepareIncidenceProperties(KCalCore::Incidence::Ptr incidence)
+{
+    if (incidence->allDay()) {
+        if (incidence->type() == KCalCore::IncidenceBase::TypeEvent) {
+            // All-day events must go from midnight of one day to midnight of the next, else
+            // it is not recognized as an all-day event even if the flag is set.
+            KCalCore::Event::Ptr event = incidence.staticCast<KCalCore::Event>();
+            KDateTime start = incidence->dtStart();
+            start.setTime(QTime(0, 0, 0, 0));
+            KDateTime end = start.addDays(1);
+            event->setDtStart(start);
+            event->setDtEnd(end);
+        }
     }
-}
-
-void IncidenceHandler::copyEventProperties(KCalCore::Event::Ptr dest, const KCalCore::Event::Ptr &src)
-{
-    dest->setHasEndDate(src->hasEndDate());
-    dest->setDtEnd(src->dtEnd());
-    dest->setTransparency(src->transparency());
-}
-
-void IncidenceHandler::copyTodoProperties(KCalCore::Todo::Ptr dest, const KCalCore::Todo::Ptr &src)
-{
-    dest->setDtRecurrence(src->dtRecurrence());
-    dest->setDtStart(src->dtStart());
-    dest->setHasDueDate(src->hasDueDate());
-    dest->setDtDue(src->dtDue());
-    dest->setHasStartDate(src->hasStartDate());
-    dest->setCompleted(src->completed());
-    dest->setPercentComplete(src->percentComplete());
-}
-
-void IncidenceHandler::copyJournalProperties(KCalCore::Journal::Ptr dest, const KCalCore::Journal::Ptr &src)
-{
-    // no journal-specific properties to copy
-    Q_UNUSED(dest);
-    Q_UNUSED(src);
 }
