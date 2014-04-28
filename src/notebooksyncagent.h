@@ -94,9 +94,9 @@ private:
                           KCalCore::Incidence::List *inserted,
                           KCalCore::Incidence::List *modified,
                           KCalCore::Incidence::List *deleted);
-    bool discardLastSyncRemoteAdditions(KCalCore::Incidence::List *sourceList);
-    bool discardLastSyncRemoteModifications(KCalCore::Incidence::List *sourceList);
-    bool discardLastSyncRemoteDeletions(KCalCore::Incidence::List *sourceList);
+    bool discardRemoteChanges(KCalCore::Incidence::List *localInserted,
+                              KCalCore::Incidence::List *localModified,
+                              KCalCore::Incidence::List *localDeleted);
     int removeCommonIncidences(KCalCore::Incidence::List *inserted,
                                KCalCore::Incidence::List *deleted);
 

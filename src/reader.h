@@ -46,6 +46,8 @@ public:
     void read(const QByteArray &data);
     const QHash<QString, CalendarResource>& results() const;
 
+    static QString hrefToUid(const QString &href);
+
 private:
     void readMultiStatus();
     void readResponse();

@@ -45,6 +45,23 @@
 
 #define NOTEBOOK_FUNCTION_CALL_TRACE LOG_CRITICAL(Q_FUNC_INFO << (mNotebook ? mNotebook->account() : ""))
 
+static KCalCore::Incidence::Ptr fetchIncidence(const mKCal::ExtendedCalendar::Ptr &calendar, const QString &uid)
+{
+    KCalCore::Event::Ptr event = calendar->event(uid);
+    if (event) {
+        return event;
+    }
+    KCalCore::Journal::Ptr journal = calendar->journal(uid);
+    if (journal) {
+        return journal;
+    }
+    KCalCore::Todo::Ptr todo = calendar->todo(uid);
+    if (todo) {
+        return todo;
+    }
+    return KCalCore::Incidence::Ptr();
+}
+
 NotebookSyncAgent::NotebookSyncAgent(mKCal::ExtendedCalendar::Ptr calendar,
                                      mKCal::ExtendedStorage::Ptr storage,
                                      CalDavCalendarDatabase *database,
@@ -217,6 +234,7 @@ void NotebookSyncAgent::sendLocalChanges()
         return;
     }
     if (inserted.isEmpty() && modified.isEmpty() && deleted.isEmpty()) {
+        LOG_DEBUG("No changes to send!");
         emitFinished(Buteo::SyncResults::NO_ERROR, "Done, no local changes for " + mServerPath);
         return;
     }
@@ -278,16 +296,7 @@ bool NotebookSyncAgent::loadLocalChanges(const QDateTime &fromDate,
     // Any server changes synced to the local db during the last sync will be picked up as
     // "local changes", so we must discard these changes so that they are not sent back to
     // the server on this next sync.
-    if (!discardLastSyncRemoteAdditions(inserted)) {
-        LOG_CRITICAL("Unable to look up last sync additions for notebook:" << notebookUid);
-        return false;
-    }
-    if (!discardLastSyncRemoteModifications(modified)) {
-        LOG_CRITICAL("Unable to look up last sync modifications for notebook:" << notebookUid);
-        return false;
-    }
-    if (!discardLastSyncRemoteDeletions(deleted)) {
-        LOG_CRITICAL("Unable to look up last sync deletions for notebook:" << notebookUid);
+    if (!discardRemoteChanges(inserted, modified, deleted)) {
         return false;
     }
     // If an event has changed to/from the caldav notebook and back since the last sync,
@@ -300,86 +309,107 @@ bool NotebookSyncAgent::loadLocalChanges(const QDateTime &fromDate,
     return true;
 }
 
-bool NotebookSyncAgent::discardLastSyncRemoteAdditions(KCalCore::Incidence::List *sourceList)
+bool NotebookSyncAgent::discardRemoteChanges(KCalCore::Incidence::List *localInserted,
+                                             KCalCore::Incidence::List *localModified,
+                                             KCalCore::Incidence::List *localDeleted)
 {
+    // Go through the local inserted, modified and deletions list and:
+    // - Discard from them respectively the additions, modifications and deletions that were
+    //   created as a result of the last remote sync.
+    // - Discard any incidences that have already been deleted on the server. (These will be
+    //   deleted locally when the current sync finishes.)
+    // - Discard any local modifications that were modified on the server, as the server
+    //   modifications take precedence.
+
     if (!mNotebook) {
         LOG_CRITICAL("no notebook");
         return false;
     }
     bool ok = false;
+    QSet<QString> remoteDeletedIncidences = QSet<QString>::fromList(mIncidenceUidsToDelete);
+
     QStringList additions = mDatabase->additions(mNotebook->uid(), &ok);
     if (!ok) {
+        LOG_CRITICAL("Unable to look up last sync additions for notebook:" << mNotebook->uid());
         return false;
     }
-    for (KCalCore::Incidence::List::iterator it = sourceList->begin(); it != sourceList->end();) {
-        int index = additions.indexOf((*it)->uid());
-        if (index >= 0) {
-            LOG_DEBUG("Discarding addition" << (*it)->uid());
-            it = sourceList->erase(it);
+    QHash<QString,QString> modifications = mDatabase->modifications(mNotebook->uid(), &ok);
+    if (!ok) {
+        LOG_CRITICAL("Unable to look up last sync modifications for notebook:" << mNotebook->uid());
+        return false;
+    }
+
+    for (KCalCore::Incidence::List::iterator it = localInserted->begin(); it != localInserted->end();) {
+        const KCalCore::Incidence::Ptr &incidence = *it;
+        const QString &uid = incidence->uid();
+        if (remoteDeletedIncidences.contains(uid)) {
+            LOG_DEBUG("Discarding addition deleted on server:" << uid);
+            it = localInserted->erase(it);
+        } else if (additions.indexOf(uid) >= 0) {
+            if (incidence->lastModified().isValid() && incidence->lastModified() > incidence->created()) {
+                // This incidence has been modified since it was added from the server in the last sync,
+                // so it's a modification rather than an addition.
+                LOG_DEBUG("Moving to modified:" << uid);
+                KCalCore::Incidence::Ptr savedIncidence = fetchIncidence(mCalendar, uid);
+                if (savedIncidence) {
+                    localModified->append(savedIncidence);
+                    it = localInserted->erase(it);
+                } else {
+                    ++it;
+                }
+            } else {
+                LOG_DEBUG("Discarding addition from previous sync:" << uid);
+                it = localInserted->erase(it);
+            }
         } else {
             ++it;
         }
     }
-    return true;
-}
 
-bool NotebookSyncAgent::discardLastSyncRemoteModifications(KCalCore::Incidence::List *sourceList)
-{
-    if (!mNotebook) {
-        LOG_CRITICAL("no notebook");
-        return false;
+    QSet<QString> serverModifiedUids;
+    for (int i=0; i<mReceivedCalendarResources.count(); i++) {
+        serverModifiedUids.insert(Reader::hrefToUid(mReceivedCalendarResources[i].href));
     }
-    bool ok = false;
-    QHash<QString,QString> modifications = mDatabase->modifications(mNotebook->uid(), &ok);
-    if (!ok) {
-        return false;
-    }
-
-    // Discard if the incidence looks the same as the one we fetched from the server during
-    // the last sync
-    for (KCalCore::Incidence::List::iterator it = sourceList->begin(); it != sourceList->end();) {
+    for (KCalCore::Incidence::List::iterator it = localModified->begin(); it != localModified->end();) {
         KCalCore::Incidence::Ptr sourceIncidence = *it;
-        if (modifications.contains(sourceIncidence->uid())) {
+        const QString &uid = sourceIncidence->uid();
+        if (remoteDeletedIncidences.contains(uid) || serverModifiedUids.contains(uid)) {
+            it = localModified->erase(it);
+            continue;
+        } else if (modifications.contains(sourceIncidence->uid())) {
             KCalCore::ICalFormat iCalFormat;
             KCalCore::Incidence::Ptr receivedIncidence = iCalFormat.fromString(modifications[sourceIncidence->uid()]);
             if (receivedIncidence.isNull()) {
                 LOG_WARNING("Not sending modification, cannot parse the received incidence:" << modifications[sourceIncidence->uid()]);
-                it = sourceList->erase(it);
+                it = localModified->erase(it);
                 continue;
             }
             // If incidences are the same, then we assume the local incidence was not changed after
             // the remote incidence was received, and thus there are no modifications to report.
             if (IncidenceHandler::copiedPropertiesAreEqual(sourceIncidence, receivedIncidence)) {
                 LOG_DEBUG("Discarding modification" << (*it)->uid());
-                it = sourceList->erase(it);
+                it = localModified->erase(it);
                 continue;
             }
         }
         ++it;
     }
-    return true;
-}
 
-bool NotebookSyncAgent::discardLastSyncRemoteDeletions(KCalCore::Incidence::List *sourceList)
-{
-    if (!mNotebook) {
-        LOG_CRITICAL("no notebook");
-        return false;
-    }
-    bool ok = false;
     QStringList deletions = mDatabase->deletions(mNotebook->uid(), &ok);
     if (!ok) {
+        LOG_CRITICAL("Unable to look up last sync deletions for notebook:" << mNotebook->uid());
         return false;
     }
-    for (KCalCore::Incidence::List::iterator it = sourceList->begin(); it != sourceList->end();) {
-        int index = deletions.indexOf((*it)->uid());
-        if (index >= 0) {
-            LOG_DEBUG("Discarding deletion" << (*it)->uid());
-            it = sourceList->erase(it);
+    for (KCalCore::Incidence::List::iterator it = localDeleted->begin(); it != localDeleted->end();) {
+        const QString &uid = (*it)->uid();
+        if (remoteDeletedIncidences.contains(uid) || deletions.indexOf(uid) >= 0) {
+            LOG_DEBUG("Discarding deletion" << uid);
+            it = localDeleted->erase(it);
         } else {
             ++it;
         }
     }
+
     return true;
 }
 
@@ -522,6 +552,7 @@ bool NotebookSyncAgent::updateIncidences(const QList<Reader::CalendarResource> &
             LOG_DEBUG("Saving new event:" << newIncidence->uid() << resource.href << resource.etag);
             newIncidence->setCustomProperty("buteo", "uri", resource.href);
             newIncidence->setCustomProperty("buteo", "etag", resource.etag);
+            IncidenceHandler::prepareIncidenceProperties(newIncidence);
 
             bool added = false;
             switch (newIncidence->type()) {
