@@ -392,6 +392,19 @@ bool NotebookSyncAgent::discardRemoteChanges(KCalCore::Incidence::List *localIns
                 continue;
             }
         }
+
+        // The default storage implementation applies the organizer as an attendee by default. Don't do this
+        // as it turns the incidence into a scheduled event requiring acceptance/rejection/etc.
+        const KCalCore::Person::Ptr organizer = sourceIncidence->organizer();
+        if (organizer) {
+            Q_FOREACH (const KCalCore::Attendee::Ptr &attendee, sourceIncidence->attendees()) {
+                if (attendee->email() == organizer->email() && attendee->fullName() == organizer->fullName()) {
+                    LOG_DEBUG("Discarding organizer as attendee" << attendee->fullName());
+                    sourceIncidence->deleteAttendee(attendee);
+                    break;
+                }
+            }
+        }
         ++it;
     }
 
