@@ -415,7 +415,6 @@ bool NotebookSyncAgent::discardRemoteChanges(KCalCore::Incidence::List *localIns
         ++it;
     }
 
-    qWarning() << "remoteDeletedIncidences:" << remoteDeletedIncidences << localDeleted->count();
     QStringList deletions = mDatabase->deletions(mNotebook->uid(), &ok);
     if (!ok) {
         LOG_CRITICAL("Unable to look up last sync deletions for notebook:" << mNotebook->uid());
