@@ -376,18 +376,18 @@ bool NotebookSyncAgent::discardRemoteChanges(KCalCore::Incidence::List *localIns
         if (remoteDeletedIncidences.contains(uid) || serverModifiedUids.contains(uid)) {
             it = localModified->erase(it);
             continue;
-        } else if (modifications.contains(sourceIncidence->uid())) {
+        } else if (modifications.contains(uid)) {
             KCalCore::ICalFormat iCalFormat;
-            KCalCore::Incidence::Ptr receivedIncidence = iCalFormat.fromString(modifications[sourceIncidence->uid()]);
+            KCalCore::Incidence::Ptr receivedIncidence = iCalFormat.fromString(modifications[uid]);
             if (receivedIncidence.isNull()) {
-                LOG_WARNING("Not sending modification, cannot parse the received incidence:" << modifications[sourceIncidence->uid()]);
+                LOG_WARNING("Not sending modification, cannot parse the received incidence:" << modifications[uid]);
                 it = localModified->erase(it);
                 continue;
             }
             // If incidences are the same, then we assume the local incidence was not changed after
             // the remote incidence was received, and thus there are no modifications to report.
             if (IncidenceHandler::copiedPropertiesAreEqual(sourceIncidence, receivedIncidence)) {
-                LOG_DEBUG("Discarding modification" << (*it)->uid());
+                LOG_DEBUG("Discarding modification" << uid);
                 it = localModified->erase(it);
                 continue;
             }

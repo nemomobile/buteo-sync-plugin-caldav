@@ -126,6 +126,10 @@ bool IncidenceHandler::journalsEqual(const KCalCore::Journal::Ptr &a, const KCal
 
 void IncidenceHandler::copyIncidenceProperties(KCalCore::Incidence::Ptr dest, const KCalCore::Incidence::Ptr &src)
 {
+    if (!dest || !src) {
+        qWarning() << "Invalid parameters!";
+        return;
+    }
     if (dest->type() != src->type()) {
         qWarning() << "incidences do not have same type!";
         return;
@@ -200,14 +204,15 @@ void IncidenceHandler::prepareIncidenceProperties(KCalCore::Incidence::Ptr incid
 {
     if (incidence->allDay()) {
         if (incidence->type() == KCalCore::IncidenceBase::TypeEvent) {
-            // All-day events must go from midnight of one day to midnight of the next, else
-            // it is not recognized as an all-day event even if the flag is set.
+            // All-day events must also have:
+            // - start date of zero time, clocktime spec
+            // - no end date
             KCalCore::Event::Ptr event = incidence.staticCast<KCalCore::Event>();
             KDateTime start = incidence->dtStart();
             start.setTime(QTime(0, 0, 0, 0));
-            KDateTime end = start.addDays(1);
+            start.setTimeSpec(KDateTime::ClockTime);
             event->setDtStart(start);
-            event->setDtEnd(end);
+            event->setDtEnd(KDateTime());
         }
     }
 }
