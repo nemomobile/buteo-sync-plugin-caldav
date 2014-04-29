@@ -42,7 +42,11 @@ public:
     explicit Report(QNetworkAccessManager *manager, Settings *settings, QObject *parent = 0);
 
     void getAllEvents(const QString &serverPath, const QDateTime &fromDateTime, const QDateTime &toDateTime);
-    void getAllETags(const QString &serverPath, const KCalCore::Incidence::List &currentLocalIncidences, const QDateTime &fromDateTime, const QDateTime &toDateTime);
+    void getAllETags(const QString &serverPath,
+                     const KCalCore::Incidence::List &currentLocalIncidences,
+                     const KCalCore::Incidence::List &localDeletedIncidences,
+                     const QDateTime &fromDateTime,
+                     const QDateTime &toDateTime);
 
     QList<Reader::CalendarResource> receivedCalendarResources() const;
     QStringList localIncidenceUidsNotOnServer() const;
@@ -58,6 +62,7 @@ private:
     QList<Reader::CalendarResource> mReceivedResources;
     QStringList mLocalIncidenceUidsNotOnServer;
     KCalCore::Incidence::List mLocalIncidences;
+    KCalCore::Incidence::List mLocalDeletedIncidences;
     QString mServerPath;
 };
 
