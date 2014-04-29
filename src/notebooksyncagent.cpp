@@ -219,7 +219,12 @@ void NotebookSyncAgent::fetchRemoteChanges(const QDateTime &fromDateTime, const 
     Report *report = new Report(mNAManager, mSettings);
     mRequests.insert(report);
     connect(report, SIGNAL(finished()), this, SLOT(reportRequestFinished()));
-    report->getAllETags(mServerPath, storageIncidenceList, fromDateTime, toDateTime);
+
+    KCalCore::Incidence::List deletions;
+    if (!mStorage->deletedIncidences(&deletions, KDateTime(mChangesSinceDate), mNotebook->uid())) {
+        LOG_CRITICAL("mKCal::ExtendedStorage::deletedIncidences() failed");
+    }
+    report->getAllETags(mServerPath, storageIncidenceList, deletions, fromDateTime, toDateTime);
 }
 
 void NotebookSyncAgent::sendLocalChanges()
@@ -313,6 +318,8 @@ bool NotebookSyncAgent::discardRemoteChanges(KCalCore::Incidence::List *localIns
                                              KCalCore::Incidence::List *localModified,
                                              KCalCore::Incidence::List *localDeleted)
 {
+    NOTEBOOK_FUNCTION_CALL_TRACE;
+
     // Go through the local inserted, modified and deletions list and:
     // - Discard from them respectively the additions, modifications and deletions that were
     //   created as a result of the last remote sync.
@@ -408,6 +415,7 @@ bool NotebookSyncAgent::discardRemoteChanges(KCalCore::Incidence::List *localIns
         ++it;
     }
 
+    qWarning() << "remoteDeletedIncidences:" << remoteDeletedIncidences << localDeleted->count();
     QStringList deletions = mDatabase->deletions(mNotebook->uid(), &ok);
     if (!ok) {
         LOG_CRITICAL("Unable to look up last sync deletions for notebook:" << mNotebook->uid());

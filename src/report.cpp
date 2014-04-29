@@ -102,11 +102,16 @@ void Report::getAllEvents(const QString &serverPath, const QDateTime &fromDateTi
             this, SLOT(slotSslErrors(QList<QSslError>)));
 }
 
-void Report::getAllETags(const QString &serverPath, const KCalCore::Incidence::List &currentLocalIncidences, const QDateTime &fromDateTime, const QDateTime &toDateTime)
+void Report::getAllETags(const QString &serverPath,
+                         const KCalCore::Incidence::List &currentLocalIncidences,
+                         const KCalCore::Incidence::List &localDeletedIncidences,
+                         const QDateTime &fromDateTime,
+                         const QDateTime &toDateTime)
 {
     FUNCTION_CALL_TRACE;
     mServerPath = serverPath;
     mLocalIncidences = currentLocalIncidences;
+    mLocalDeletedIncidences = localDeletedIncidences;
 
     QNetworkRequest request;
     prepareRequest(&request, serverPath);
@@ -257,6 +262,19 @@ void Report::processETags()
                 Reader::CalendarResource resource = map.take(uri);
                 if (incidence->customProperty("buteo", "etag") != resource.etag) {
                     eventIdList.append(resource.href);
+                }
+            }
+        }
+        // if a locally deleted incidence is not on the server (i.e. was deleted), add
+        // this to the list
+        if (mLocalDeletedIncidences.count()) {
+            QSet<QString> remoteUids;
+            Q_FOREACH (const QString &href, map.keys()) {
+                remoteUids.insert(Reader::hrefToUid(href));
+            }
+            Q_FOREACH (KCalCore::Incidence::Ptr incidence, mLocalDeletedIncidences) {
+                if (!remoteUids.contains(incidence->uid())) {
+                    mLocalIncidenceUidsNotOnServer.append(incidence->uid());
                 }
             }
         }
