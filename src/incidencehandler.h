@@ -35,13 +35,11 @@ public:
     static bool copiedPropertiesAreEqual(const KCalCore::Incidence::Ptr &a, const KCalCore::Incidence::Ptr &b);
     static void copyIncidenceProperties(KCalCore::Incidence::Ptr dest, const KCalCore::Incidence::Ptr &src);
 
+    static void prepareIncidenceProperties(KCalCore::Incidence::Ptr incidence);
+
 private:
     IncidenceHandler();
     ~IncidenceHandler();
-
-    static void copyEventProperties(KCalCore::Event::Ptr dest, const KCalCore::Event::Ptr &src);
-    static void copyTodoProperties(KCalCore::Todo::Ptr dest, const KCalCore::Todo::Ptr &src);
-    static void copyJournalProperties(KCalCore::Journal::Ptr dest, const KCalCore::Journal::Ptr &src);
 
     static bool eventsEqual(const KCalCore::Event::Ptr &a, const KCalCore::Event::Ptr &b);
     static bool todosEqual(const KCalCore::Todo::Ptr &a, const KCalCore::Todo::Ptr &b);
