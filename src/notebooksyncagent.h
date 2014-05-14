@@ -82,6 +82,7 @@ private slots:
     void nonReportRequestFinished();
 
 private:
+    void sendReportRequest();
     void clearRequests();
     void emitFinished(int minorErrorCode, const QString &message);
 
@@ -113,10 +114,13 @@ private:
     mKCal::ExtendedCalendar::Ptr mCalendar;
     mKCal::ExtendedStorage::Ptr mStorage;
     mKCal::Notebook::Ptr mNotebook;
+    QDateTime mFromDateTime;
+    QDateTime mToDateTime;
     QDateTime mChangesSinceDate;
     QString mServerPath;
     SyncMode mSyncMode;
     bool mFinished;
+    bool mRetriedReport;
 };
 
 #endif // NOTEBOOKSYNCAGENT_P_H

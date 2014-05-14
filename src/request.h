@@ -48,6 +48,7 @@ public:
     QString command() const;
     int errorCode() const;
     QString errorString() const;
+    QNetworkReply::NetworkError networkError() const;
 
 Q_SIGNALS:
     void finished();
@@ -74,6 +75,7 @@ protected:
     const QString REQUEST_TYPE;
     Settings* mSettings;
     QPointer<Request> mSelfPointer;
+    QNetworkReply::NetworkError mNetworkError;
     int mMinorCode;
     QString mErrorString;
 };
