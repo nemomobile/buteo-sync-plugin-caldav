@@ -31,6 +31,7 @@ Request::Request(QNetworkAccessManager *manager,
     , mNAManager(manager)
     , REQUEST_TYPE(requestType)
     , mSettings(settings)
+    , mNetworkError(QNetworkReply::NoError)
     , mMinorCode(Buteo::SyncResults::NO_ERROR)
 {
     FUNCTION_CALL_TRACE;
@@ -48,6 +49,11 @@ QString Request::errorString() const
     return mErrorString;
 }
 
+QNetworkReply::NetworkError Request::networkError() const
+{
+    return mNetworkError;
+}
+
 QString Request::command() const
 {
     return REQUEST_TYPE;
@@ -55,6 +61,7 @@ QString Request::command() const
 
 void Request::finishedWithReplyResult(QNetworkReply::NetworkError error)
 {
+    mNetworkError = error;
     if (error == QNetworkReply::NoError) {
         finishedWithSuccess();
     } else {

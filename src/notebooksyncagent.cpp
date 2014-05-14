@@ -79,6 +79,7 @@ NotebookSyncAgent::NotebookSyncAgent(mKCal::ExtendedCalendar::Ptr calendar,
     , mServerPath(calendarServerPath)
     , mSyncMode(NoSyncMode)
     , mFinished(false)
+    , mRetriedReport(false)
 {
 }
 
@@ -126,6 +127,9 @@ void NotebookSyncAgent::startSlowSync(const QString &notebookName,
     NOTEBOOK_FUNCTION_CALL_TRACE;
 
     mSyncMode = SlowSync;
+    mFromDateTime = fromDateTime;
+    mToDateTime = toDateTime;
+
     mNotebook = mKCal::Notebook::Ptr(new mKCal::Notebook(notebookName, QString()));
     mNotebook->setAccount(notebookAccountId);
     mNotebook->setPluginName(pluginName);
@@ -139,10 +143,7 @@ void NotebookSyncAgent::startSlowSync(const QString &notebookName,
     }
     LOG_DEBUG("NOTEBOOK created" << mNotebook->uid() << "account:" << mNotebook->account());
 
-    Report *report = new Report(mNAManager, mSettings);
-    mRequests.insert(report);
-    connect(report, SIGNAL(finished()), this, SLOT(reportRequestFinished()));
-    report->getAllEvents(mServerPath, fromDateTime, toDateTime);
+    sendReportRequest();
 }
 
 /*
@@ -168,8 +169,22 @@ void NotebookSyncAgent::startQuickSync(mKCal::Notebook::Ptr notebook,
     mNotebook = notebook;
     mCalendarIncidencesBeforeSync = allCalendarIncidences;
     mChangesSinceDate = changesSinceDate;
+    mFromDateTime = fromDateTime;
+    mToDateTime = toDateTime;
 
-    fetchRemoteChanges(fromDateTime, toDateTime);
+    sendReportRequest();
+}
+
+void NotebookSyncAgent::sendReportRequest()
+{
+    if (mSyncMode == SlowSync) {
+        Report *report = new Report(mNAManager, mSettings);
+        mRequests.insert(report);
+        connect(report, SIGNAL(finished()), this, SLOT(reportRequestFinished()));
+        report->getAllEvents(mServerPath, mFromDateTime, mToDateTime);
+    } else {
+        fetchRemoteChanges(mFromDateTime, mToDateTime);
+    }
 }
 
 void NotebookSyncAgent::finalize()
@@ -481,6 +496,13 @@ void NotebookSyncAgent::reportRequestFinished()
             sendLocalChanges();
             return;
         }
+    } else if (report->networkError() == QNetworkReply::AuthenticationRequiredError
+               && !mRetriedReport) {
+        // Yahoo sometimes fails the initial request with an authentication error. Let's try once more
+        qWarning() << "Retrying REPORT after request failed with QNetworkReply::AuthenticationRequiredError";
+        mRetriedReport = true;
+        sendReportRequest();
+        return;
     }
     emitFinished(report->errorCode(), report->errorString());
 }

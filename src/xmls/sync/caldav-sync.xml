@@ -11,4 +11,8 @@
         <key value="HTTP" name="Sync Transport"/>
         <key value="prefer remote" name="conflictpolicy" />
     </profile>
+
+    <schedule enabled="true" interval="720" syncconfiguredtime="" days="" time="">
+        <rush end="" enabled="false" interval="15" begin="" days=""/>
+    </schedule>
 </profile>

@@ -218,6 +218,10 @@ void Report::processETags()
         finishedWithInternalError();
         return;
     }
+    if (reply->error() != QNetworkReply::NoError) {
+        finishedWithReplyResult(reply->error());
+        return;
+    }
     QVariant statusCode = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute);
     if (statusCode.isValid()) {
         int status = statusCode.toInt();
