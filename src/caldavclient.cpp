@@ -65,7 +65,7 @@ CalDavClient::CalDavClient(const QString& aPluginName,
     , mDatabase(0)
     , mCalendar(0)
     , mStorage(0)
-    , mSlowSync(true)
+    , mFirstSync(true)
 {
     FUNCTION_CALL_TRACE;
 }
@@ -82,9 +82,9 @@ bool CalDavClient::init()
     FUNCTION_CALL_TRACE;
 
     if (lastSyncTime().isNull()) {
-        mSlowSync = true;
+        mFirstSync = true;
     } else {
-        mSlowSync = false;
+        mFirstSync = false;
     }
 
     mNAManager = new QNetworkAccessManager(this);
@@ -124,40 +124,6 @@ void CalDavClient::abortSync(Sync::SyncStatus aStatus)
 {
     FUNCTION_CALL_TRACE;
     abort(aStatus);
-}
-
-bool CalDavClient::start()
-{
-    FUNCTION_CALL_TRACE;
-
-    if (!mAuth->username().isEmpty() && !mAuth->password().isEmpty()) {
-        mSettings.setUsername(mAuth->username());
-        mSettings.setPassword(mAuth->password());
-    }
-    mSettings.setAuthToken(mAuth->token());
-
-    switch (mSyncDirection) {
-    case Buteo::SyncProfile::SYNC_DIRECTION_TWO_WAY:
-        if (mSlowSync) {
-            startSlowSync();
-        } else {
-            startQuickSync();
-        }
-        break;
-    case Buteo::SyncProfile::SYNC_DIRECTION_FROM_REMOTE:
-        // Not required
-        break;
-    case Buteo::SyncProfile::SYNC_DIRECTION_TO_REMOTE:
-        // Not required
-        break;
-    case Buteo::SyncProfile::SYNC_DIRECTION_UNDEFINED:
-        // flow through
-    default:
-        // throw configuration error
-        break;
-    };
-
-    return true;
 }
 
 void CalDavClient::abort(Sync::SyncStatus status)
@@ -338,12 +304,12 @@ void CalDavClient::syncFinished(int minorErrorCode, const QString &message)
 
     clearAgents();
 
-    if (mSlowSync) {
+    if (mFirstSync) {
         if (minorErrorCode == Buteo::SyncResults::NO_ERROR) {
             // Set the lastSyncTime after the calendar data is
             // written locally to the mkcal db.
             mSyncStartTime = QDateTime::currentDateTime().toUTC().addSecs(2);
-            LOG_DEBUG("\n\n++++++++++++++ Slow sync mSyncStartTime:" << mSyncStartTime << "LAST SYNC:" << lastSyncTime());
+            LOG_DEBUG("\n\n++++++++++++++ First sync mSyncStartTime:" << mSyncStartTime << "LAST SYNC:" << lastSyncTime());
         } else {
             if (mDatabase->writeStatus() != CalDavCalendarDatabase::Error) {
                 deleteNotebooksForAccount(mSettings.accountId(), mCalendar, mStorage);
@@ -411,9 +377,15 @@ void CalDavClient::getSyncDateRange(const QDateTime &sourceDate, QDateTime *from
     *toDateTime = sourceDate.addMonths(12);
 }
 
-void CalDavClient::startSlowSync()
+void CalDavClient::start()
 {
     FUNCTION_CALL_TRACE;
+
+    if (!mAuth->username().isEmpty() && !mAuth->password().isEmpty()) {
+        mSettings.setUsername(mAuth->username());
+        mSettings.setPassword(mAuth->password());
+    }
+    mSettings.setAuthToken(mAuth->token());
 
     QList<Settings::CalendarInfo> allCalendarInfo = mSettings.calendars();
     if (allCalendarInfo.isEmpty()) {
@@ -427,68 +399,55 @@ void CalDavClient::startSlowSync()
         return;
     }
 
-    mSyncStartTime = QDateTime();
     QDateTime fromDateTime;
     QDateTime toDateTime;
-    getSyncDateRange(QDateTime::currentDateTime().toUTC(), &fromDateTime, &toDateTime);
-
-    Q_FOREACH (const Settings::CalendarInfo &calendarInfo, allCalendarInfo) {
-        NotebookSyncAgent *agent = new NotebookSyncAgent(mCalendar, mStorage, mDatabase, mNAManager, &mSettings, calendarInfo.serverPath, this);
-        connect(agent, SIGNAL(finished(int,QString)),
-                this, SLOT(notebookSyncFinished(int,QString)));
-        mNotebookSyncAgents.append(agent);
-        agent->startSlowSync(calendarInfo.displayName,
-                             mSettings.notebookId(calendarInfo.serverPath),
-                             getPluginName(),
-                             getProfileName(),
-                             calendarInfo.color,
-                             fromDateTime,
-                             toDateTime);
+    KCalCore::Incidence::List calendarIncidences;
+    mKCal::Notebook::List notebooks;
+    if (mFirstSync) {
+        mSyncStartTime = QDateTime();
+        getSyncDateRange(QDateTime::currentDateTime().toUTC(), &fromDateTime, &toDateTime);
+    } else {
+        mSyncStartTime = QDateTime::currentDateTime().toUTC();
+        getSyncDateRange(mSyncStartTime, &fromDateTime, &toDateTime);
+        if (!mStorage->load(fromDateTime.date(), toDateTime.date())) {
+            syncFinished(Buteo::SyncResults::DATABASE_FAILURE, "unable to load calendar storage");
+            return;
+        }
+        calendarIncidences = mCalendar->incidences(fromDateTime.date(), toDateTime.date());
+        notebooks = mStorage->notebooks();
     }
-}
-
-void CalDavClient::startQuickSync()
-{
-    FUNCTION_CALL_TRACE;
-
-    QList<Settings::CalendarInfo> allCalendarInfo = mSettings.calendars();
-    if (allCalendarInfo.isEmpty()) {
-        syncFinished(Buteo::SyncResults::NO_ERROR, "No calendars for this account");
-        return;
-    }
-    mCalendar = mKCal::ExtendedCalendar::Ptr(new mKCal::ExtendedCalendar(KDateTime::Spec::UTC()));
-    mStorage = mKCal::ExtendedCalendar::defaultStorage(mCalendar);
-    if (!mStorage->open()) {
-        syncFinished(Buteo::SyncResults::DATABASE_FAILURE, "unable to open calendar storage");
-        return;
-    }
-
-    mSyncStartTime = QDateTime::currentDateTime().toUTC();
     LOG_DEBUG("\n\n++++++++++++++ mSyncStartTime:" << mSyncStartTime << "LAST SYNC:" << lastSyncTime());
 
-    QDateTime fromDateTime;
-    QDateTime toDateTime;
-    getSyncDateRange(mSyncStartTime, &fromDateTime, &toDateTime);
-    if (!mStorage->load(fromDateTime.date(), toDateTime.date())) {
-        syncFinished(Buteo::SyncResults::DATABASE_FAILURE, "unable to load calendar storage");
-        return;
-    }
-    KCalCore::Incidence::List calendarIncidences = mCalendar->incidences(fromDateTime.date(), toDateTime.date());
-    mKCal::Notebook::List notebookList = mStorage->notebooks();
-    Q_FOREACH (mKCal::Notebook::Ptr notebook, notebookList) {
-        Q_FOREACH (const Settings::CalendarInfo &calendarInfo, allCalendarInfo) {
+    Q_FOREACH (const Settings::CalendarInfo &calendarInfo, allCalendarInfo) {
+        mKCal::Notebook::Ptr existingNotebook;
+        Q_FOREACH (mKCal::Notebook::Ptr notebook, notebooks) {
             if (notebook->account() == mSettings.notebookId(calendarInfo.serverPath)) {
-                NotebookSyncAgent *agent = new NotebookSyncAgent(mCalendar, mStorage, mDatabase, mNAManager, &mSettings, calendarInfo.serverPath, this);
-                connect(agent, SIGNAL(finished(int,QString)),
-                        this, SLOT(notebookSyncFinished(int,QString)));
-                mNotebookSyncAgents.append(agent);
-                agent->startQuickSync(notebook, lastSyncTime(), calendarIncidences, fromDateTime, toDateTime);
+                existingNotebook = notebook;
                 break;
             }
         }
+        if (existingNotebook) {
+            NotebookSyncAgent *agent = new NotebookSyncAgent(mCalendar, mStorage, mDatabase, mNAManager, &mSettings, calendarInfo.serverPath, this);
+            connect(agent, SIGNAL(finished(int,QString)),
+                    this, SLOT(notebookSyncFinished(int,QString)));
+            mNotebookSyncAgents.append(agent);
+            agent->startQuickSync(existingNotebook, lastSyncTime(), calendarIncidences, fromDateTime, toDateTime);
+        } else {
+            NotebookSyncAgent *agent = new NotebookSyncAgent(mCalendar, mStorage, mDatabase, mNAManager, &mSettings, calendarInfo.serverPath, this);
+            connect(agent, SIGNAL(finished(int,QString)),
+                    this, SLOT(notebookSyncFinished(int,QString)));
+            mNotebookSyncAgents.append(agent);
+            agent->startSlowSync(calendarInfo.displayName,
+                                 mSettings.notebookId(calendarInfo.serverPath),
+                                 getPluginName(),
+                                 getProfileName(),
+                                 calendarInfo.color,
+                                 fromDateTime,
+                                 toDateTime);
+        }
     }
     if (mNotebookSyncAgents.isEmpty()) {
-        syncFinished(Buteo::SyncResults::INTERNAL_ERROR, "Could not find the notebooks for this account");
+        syncFinished(Buteo::SyncResults::INTERNAL_ERROR, "Could not add or find existing notebooks for this account");
     }
 }
 
