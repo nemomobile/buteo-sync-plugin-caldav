@@ -42,8 +42,6 @@
 #include <ProfileEngineDefs.h>
 #include <ProfileManager.h>
 
-#define KEY_ACCOUNT_SERVICE_NAME "account_service_name"
-
 extern "C" CalDavClient* createPlugin(const QString& aPluginName,
                                          const Buteo::SyncProfile& aProfile,
                                          Buteo::PluginCbInterface *aCbInterface)
@@ -246,15 +244,10 @@ bool CalDavClient::initConfig()
     }
 
     QString accountIdString = iProfile.key(Buteo::KEY_ACCOUNT_ID);
-    QString serviceName = iProfile.key(KEY_ACCOUNT_SERVICE_NAME);
     bool accountIdOk = false;
     int accountId = accountIdString.toInt(&accountIdOk);
     if (!accountIdOk) {
         LOG_CRITICAL("no account id specified," << Buteo::KEY_ACCOUNT_ID << "not found in profile");
-        return false;
-    }
-    if (serviceName.isEmpty()) {
-        LOG_CRITICAL("no service name specified," << KEY_ACCOUNT_SERVICE_NAME << "not found in profile");
         return false;
     }
     Accounts::Account *account = mManager->account(accountId);
@@ -262,9 +255,16 @@ bool CalDavClient::initConfig()
         LOG_CRITICAL("cannot find account" << accountId);
         return false;
     }
-    Accounts::Service srv = mManager->service(serviceName);
+    Accounts::Service srv;
+    Q_FOREACH (const Accounts::Service &currService, account->services()) {
+        account->selectService(currService);
+        if (!account->value("calendars").toStringList().isEmpty()) {
+            srv = currService;
+            break;
+        }
+    }
     if (!srv.isValid()) {
-        LOG_CRITICAL("cannot load service" << serviceName);
+        LOG_CRITICAL("cannot find a service for account" << accountId << "with a valid calendar list");
         return false;
     }
 
@@ -282,7 +282,7 @@ bool CalDavClient::initConfig()
         return false;
     }
 
-    mAuth = new AuthHandler(mManager, accountId, serviceName);
+    mAuth = new AuthHandler(mManager, accountId, srv.name());
     if (!mAuth->init()) {
         return false;
     }
