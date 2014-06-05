@@ -135,14 +135,12 @@ public Q_SLOTS:
     virtual void connectivityStateChanged(Sync::ConnectivityType aType, bool aState);
 
 private Q_SLOTS:
-    bool start();
+    void start();
     void authenticationError();
     void databaseWriteStatusChanged();
     void notebookSyncFinished(int errorCode, const QString &errorString);
 
 private:
-    void startSlowSync();
-    void startQuickSync();
     QDateTime lastSyncTime();
     void abort(Sync::SyncStatus aStatus = Sync::SYNC_ABORTED);
     bool initConfig();
@@ -169,7 +167,7 @@ private:
     Buteo::SyncProfile::ConflictResolutionPolicy mConflictResPolicy;
     Settings                    mSettings;
     QDateTime                   mSyncStartTime;
-    bool                        mSlowSync;
+    bool                        mFirstSync;
 };
 
 /*! \brief Creates CalDav client plugin
