@@ -28,7 +28,10 @@ A Buteo plugin which syncs calendar data from CalDAV services
 
 %files
 %defattr(-,root,root,-)
-/usr/lib/buteo-plugins-qt5/libcaldav-client.so
+#out-of-process-plugin
+/usr/lib/buteo-plugins-qt5/oopp/caldav-client
+#in-process-plugin
+#/usr/lib/buteo-plugins-qt5/libcaldav-client.so
 %config %{_sysconfdir}/buteo/profiles/client/caldav.xml
 %config %{_sysconfdir}/buteo/profiles/sync/caldav-sync.xml
 
@@ -36,7 +39,7 @@ A Buteo plugin which syncs calendar data from CalDAV services
 %setup -q -n %{name}-%{version}
 
 %build
-%qmake5
+%qmake5 "DEFINES+=BUTEO_OUT_OF_PROCESS_SUPPORT"
 make %{?jobs:-j%jobs}
 
 %pre
