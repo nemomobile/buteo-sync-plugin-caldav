@@ -23,6 +23,8 @@
 
 #include "request.h"
 
+#include <LogMacros.h>
+
 Request::Request(QNetworkAccessManager *manager,
                  Settings *settings,
                  const QString &requestType,
@@ -133,45 +135,51 @@ bool Request::wasDeleted() const
 
 void Request::debugRequest(const QNetworkRequest &request, const QByteArray &data)
 {
-#ifdef BUTEO_ENABLE_DEBUG
-    qDebug() << "-----------------------------------------------\n";
-    const QList<QByteArray>& rawHeaderList(request.rawHeaderList());
-    Q_FOREACH (const QByteArray &rawHeader, rawHeaderList) {
-        qDebug() << rawHeader << " : " << request.rawHeader(rawHeader);
-    }
-    qDebug() << "URL = " << request.url();
-    qDebug() << "Request : \n" << data;
-    qDebug() << "---------------------------------------------------------------------\n";
-#endif
+    LOG_PROTOCOL(debuggingString(request, data));
 }
 
 void Request::debugRequest(const QNetworkRequest &request, const QString &data)
 {
-#ifdef BUTEO_ENABLE_DEBUG
-    debugRequest(request, data.toLatin1());
-#endif
+    LOG_PROTOCOL(debuggingString(request, data.toLatin1()));
 }
 
 void Request::debugReply(const QNetworkReply &reply, const QByteArray &data)
 {
-#ifdef BUTEO_ENABLE_DEBUG
-    qDebug() << "---------------------------------------------------------------------\n";
-    qDebug() << REQUEST_TYPE << "response status code:" << reply.attribute(QNetworkRequest::HttpStatusCodeAttribute);
-    QList<QNetworkReply::RawHeaderPair> headers = reply.rawHeaderPairs();
-    qDebug() << REQUEST_TYPE << "response headers:";
-    for (int i=0; i<headers.count(); i++) {
-        qDebug() << "\t" << headers[i].first << ":" << headers[i].second;
-    }
-    if (!data.isEmpty()) {
-        qDebug() << REQUEST_TYPE << "response data:" << data;
-    }
-    qDebug() << "---------------------------------------------------------------------\n";
-#endif
+    LOG_PROTOCOL(debuggingString(reply, data));
 }
 
 void Request::debugReplyAndReadAll(QNetworkReply *reply)
 {
-#ifdef BUTEO_ENABLE_DEBUG
-    debugReply(*reply, reply->readAll());
-#endif
+    LOG_PROTOCOL(debuggingString(*reply, reply->readAll()));
+}
+
+QString Request::debuggingString(const QNetworkRequest &request, const QByteArray &data)
+{
+    QStringList text;
+    text += "---------------------------------------------------------------------";
+    const QList<QByteArray> &rawHeaderList = request.rawHeaderList();
+    Q_FOREACH (const QByteArray &rawHeader, rawHeaderList) {
+        text += rawHeader + " : " + request.rawHeader(rawHeader);
+    }
+    text += "URL = " + request.url().toString();
+    text += "Request : \n" + data;
+    text += "---------------------------------------------------------------------\n";
+    return text.join(QChar('\n'));
+}
+
+QString Request::debuggingString(const QNetworkReply &reply, const QByteArray &data)
+{
+    QStringList text;
+    text += "---------------------------------------------------------------------";
+    text += REQUEST_TYPE + " response status code: " + reply.attribute(QNetworkRequest::HttpStatusCodeAttribute).toString();
+    QList<QNetworkReply::RawHeaderPair> headers = reply.rawHeaderPairs();
+    text += REQUEST_TYPE + " response headers:";
+    for (int i=0; i<headers.count(); i++) {
+        text += "\t" + headers[i].first + " : " + headers[i].second;
+    }
+    if (!data.isEmpty()) {
+        text += REQUEST_TYPE + " response data:" + data;
+    }
+    text += "---------------------------------------------------------------------\n";
+    return text.join(QChar('\n'));
 }

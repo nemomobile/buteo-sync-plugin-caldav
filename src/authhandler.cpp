@@ -69,7 +69,7 @@ bool AuthHandler::init()
     FUNCTION_CALL_TRACE;
 
     if (mAccount == NULL) {
-        LOG_DEBUG("Account is not created... Cannot authenticate");
+        LOG_DEBUG("Invalid account");
         return false;
     }
 
@@ -130,13 +130,11 @@ void AuthHandler::sessionResponse(const SessionData &sessionData)
         OAuth2PluginNS::OAuth2PluginTokenData response = sessionData.data<OAuth2PluginNS::OAuth2PluginTokenData>();
         mToken = response.AccessToken();
     } else {
-        LOG_FATAL("Unsupported Mechanism requested....................");
+        LOG_FATAL("Unsupported Mechanism requested!");
         emit failed();
         return;
     }
-
-    LOG_DEBUG("Authenticated !!!");
-
+    LOG_DEBUG("Authenticated!");
     emit success();
 }
 
@@ -212,7 +210,7 @@ void AuthHandler::authenticate()
 
         mSession->process(data, mMechanism);
     } else {
-        LOG_FATAL("Unsupported Method requested....................");
+        LOG_FATAL("Unsupported Method requested!");
         emit failed();
     }
 }

@@ -35,6 +35,8 @@
 #include <incidence.h>
 #include <icalformat.h>
 
+#include <LogMacros.h>
+
 Put::Put(QNetworkAccessManager *manager, Settings *settings, QObject *parent)
     : Request(manager, settings, "PUT", parent)
 {

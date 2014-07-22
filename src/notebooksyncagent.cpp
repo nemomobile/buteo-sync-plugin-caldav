@@ -43,7 +43,7 @@
 #include <QDebug>
 
 
-#define NOTEBOOK_FUNCTION_CALL_TRACE LOG_CRITICAL(Q_FUNC_INFO << (mNotebook ? mNotebook->account() : ""))
+#define NOTEBOOK_FUNCTION_CALL_TRACE FUNCTION_CALL_TRACE(QString("%1 %2").arg(Q_FUNC_INFO).arg(mNotebook ? mNotebook->account() : ""))
 
 static KCalCore::Incidence::Ptr fetchIncidence(const mKCal::ExtendedCalendar::Ptr &calendar, const QString &uid)
 {
