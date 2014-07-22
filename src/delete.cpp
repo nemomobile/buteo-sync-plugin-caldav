@@ -27,6 +27,8 @@
 #include <QNetworkAccessManager>
 #include <QDebug>
 
+#include <LogMacros.h>
+
 static const QString VCalExtension = QStringLiteral(".ics");
 
 Delete::Delete(QNetworkAccessManager *manager, Settings *settings, QObject *parent)

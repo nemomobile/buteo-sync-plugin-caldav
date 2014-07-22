@@ -26,7 +26,6 @@
 
 #include "settings.h"
 
-#include <LogMacros.h>
 #include <SyncCommonDefs.h>
 #include <SyncResults.h>
 
@@ -70,6 +69,9 @@ protected:
     void debugRequest(const QNetworkRequest &request, const QString &data);
     void debugReply(const QNetworkReply &reply, const QByteArray &data);
     void debugReplyAndReadAll(QNetworkReply *reply);
+
+    QString debuggingString(const QNetworkRequest &request, const QByteArray &data);
+    QString debuggingString(const QNetworkReply &reply, const QByteArray &data);
 
     QNetworkAccessManager *mNAManager;
     const QString REQUEST_TYPE;

@@ -32,6 +32,8 @@
 
 #include <incidence.h>
 
+#include <LogMacros.h>
+
 static const QString DateTimeFormat = QStringLiteral("yyyyMMddTHHmmss");
 static const QString DateTimeFormatUTC = DateTimeFormat + QStringLiteral("Z");
 

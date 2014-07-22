@@ -10,6 +10,8 @@
 #include <incidence.h>
 #include <icalformat.h>
 
+#include <LogMacros.h>
+
 Get::Get(QNetworkAccessManager *manager, Settings *settings, QObject *parent)
     : Request(manager, settings, "GET", parent)
 {
