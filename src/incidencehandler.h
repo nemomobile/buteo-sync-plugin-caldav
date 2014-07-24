@@ -35,7 +35,8 @@ public:
     static bool copiedPropertiesAreEqual(const KCalCore::Incidence::Ptr &a, const KCalCore::Incidence::Ptr &b);
     static void copyIncidenceProperties(KCalCore::Incidence::Ptr dest, const KCalCore::Incidence::Ptr &src);
 
-    static void prepareIncidenceProperties(KCalCore::Incidence::Ptr incidence);
+    static void prepareImportedIncidence(KCalCore::Incidence::Ptr incidence);
+    static KCalCore::Incidence::Ptr incidenceToExport(KCalCore::Incidence::Ptr sourceIncidence);
 
 private:
     IncidenceHandler();
