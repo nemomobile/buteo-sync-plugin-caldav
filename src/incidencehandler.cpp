@@ -143,6 +143,14 @@ void IncidenceHandler::copyIncidenceProperties(KCalCore::Incidence::Ptr dest, co
     KDateTime origCreated = dest->created();
     KDateTime origLastModified = dest->lastModified();
 
+    if (dest->type() == KCalCore::IncidenceBase::TypeEvent && src->type() == KCalCore::IncidenceBase::TypeEvent) {
+        KCalCore::Event::Ptr destEvent = dest.staticCast<KCalCore::Event>();
+        KCalCore::Event::Ptr srcEvent = src.staticCast<KCalCore::Event>();
+        destEvent->setDtEnd(srcEvent->dtEnd());
+        destEvent->setHasEndDate(srcEvent->hasEndDate());
+        destEvent->setTransparency(srcEvent->transparency());
+    }
+
     // Recurrences need to be copied through serialization, else they are not recreated.
     dest->clearRecurrence();
     QBuffer buffer;
@@ -153,12 +161,14 @@ void IncidenceHandler::copyIncidenceProperties(KCalCore::Incidence::Ptr dest, co
     buffer.seek(0);
     in >> *dest.data();
 
+    // dtStart and dtEnd changes allDay value, so must set those before copying allDay value
+    dest->setDtStart(src->dtStart());
     dest->setAllDay(src->allDay());
+
     dest->setDuration(src->duration());
     dest->setHasDuration(src->hasDuration());
     dest->setOrganizer(src->organizer());
     dest->setReadOnly(src->isReadOnly());
-    dest->setDtStart(src->dtStart());
 
     dest->clearAttendees();
     Q_FOREACH (const KCalCore::Attendee::Ptr &attendee, src->attendees()) {
