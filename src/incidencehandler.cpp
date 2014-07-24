@@ -256,6 +256,17 @@ KCalCore::Incidence::Ptr IncidenceHandler::incidenceToExport(KCalCore::Incidence
     KCalCore::Incidence::Ptr incidence = QSharedPointer<KCalCore::Incidence>(sourceIncidence->clone());
     KCalCore::Event::Ptr event = incidence.staticCast<KCalCore::Event>();
 
+    if (event->allDay()) {
+        if (event->hasEndDate()) {
+            KDateTime dt = event->dtEnd();
+            // Event::dtEnd() is inclusive, but DTEND in iCalendar format is exclusive.
+            LOG_DEBUG("Adding +1 day to" << dt.toString() << "to make exclusive DTEND");
+            dt = dt.addDays(1);
+            event->setDtEnd(dt);
+        } else {
+            KDateTime dt = event->dtStart().addDays(1);
+            LOG_DEBUG("Adding DTEND of DTSTART+1" << dt.toString());
+            event->setDtEnd(dt);
         }
     }
 
