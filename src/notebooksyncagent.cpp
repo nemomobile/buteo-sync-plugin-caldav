@@ -126,6 +126,9 @@ void NotebookSyncAgent::startSlowSync(const QString &notebookName,
 {
     NOTEBOOK_FUNCTION_CALL_TRACE;
 
+    LOG_DEBUG("Start slow sync for notebook:" << notebookName << "for account" << notebookAccountId
+              << "between" << fromDateTime << "to" << toDateTime);
+
     mSyncMode = SlowSync;
     mFromDateTime = fromDateTime;
     mToDateTime = toDateTime;
@@ -165,6 +168,11 @@ void NotebookSyncAgent::startQuickSync(mKCal::Notebook::Ptr notebook,
                                        const QDateTime &toDateTime)
 {
     NOTEBOOK_FUNCTION_CALL_TRACE;
+
+    LOG_DEBUG("Start quick sync for notebook:" << notebook->uid()
+              << "between" << fromDateTime << "to" << toDateTime
+              << ", sync changes since" << changesSinceDate);
+
     mSyncMode = QuickSync;
     mNotebook = notebook;
     mCalendarIncidencesBeforeSync = allCalendarIncidences;
@@ -568,6 +576,8 @@ bool NotebookSyncAgent::updateIncidences(const QList<Reader::CalendarResource> &
         if (newIncidence.isNull()) {
             continue;
         }
+        // find any existing incidence with this uid
+        mStorage->load(newIncidence->uid());
         KCalCore::Incidence::Ptr storedIncidence;
         switch (newIncidence->type()) {
         case KCalCore::IncidenceBase::TypeEvent:

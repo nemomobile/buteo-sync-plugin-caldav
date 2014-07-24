@@ -401,7 +401,6 @@ void CalDavClient::start()
 
     QDateTime fromDateTime;
     QDateTime toDateTime;
-    KCalCore::Incidence::List calendarIncidences;
     mKCal::Notebook::List notebooks;
     if (mFirstSync) {
         mSyncStartTime = QDateTime();
@@ -409,11 +408,6 @@ void CalDavClient::start()
     } else {
         mSyncStartTime = QDateTime::currentDateTime().toUTC();
         getSyncDateRange(mSyncStartTime, &fromDateTime, &toDateTime);
-        if (!mStorage->load(fromDateTime.date(), toDateTime.date())) {
-            syncFinished(Buteo::SyncResults::DATABASE_FAILURE, "unable to load calendar storage");
-            return;
-        }
-        calendarIncidences = mCalendar->incidences(fromDateTime.date(), toDateTime.date());
         notebooks = mStorage->notebooks();
     }
     LOG_DEBUG("\n\n++++++++++++++ mSyncStartTime:" << mSyncStartTime << "LAST SYNC:" << lastSyncTime());
@@ -427,10 +421,16 @@ void CalDavClient::start()
             }
         }
         if (existingNotebook) {
+            if (!mStorage->loadNotebookIncidences(existingNotebook->uid())) {
+                syncFinished(Buteo::SyncResults::DATABASE_FAILURE, "unable to load calendar storage");
+                return;
+            }
             NotebookSyncAgent *agent = new NotebookSyncAgent(mCalendar, mStorage, mDatabase, mNAManager, &mSettings, calendarInfo.serverPath, this);
             connect(agent, SIGNAL(finished(int,QString)),
                     this, SLOT(notebookSyncFinished(int,QString)));
             mNotebookSyncAgents.append(agent);
+            KCalCore::Incidence::List calendarIncidences;
+            calendarIncidences = mCalendar->incidences(existingNotebook->uid());
             agent->startQuickSync(existingNotebook, lastSyncTime(), calendarIncidences, fromDateTime, toDateTime);
         } else {
             NotebookSyncAgent *agent = new NotebookSyncAgent(mCalendar, mStorage, mDatabase, mNAManager, &mSettings, calendarInfo.serverPath, this);
