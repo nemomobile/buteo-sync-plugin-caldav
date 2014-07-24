@@ -24,7 +24,7 @@
 #include "put.h"
 #include "report.h"
 #include "settings.h"
-#include "get.h"
+#include "incidencehandler.h"
 
 #include <QNetworkAccessManager>
 #include <QBuffer>
@@ -48,8 +48,8 @@ void Put::updateEvent(const QString &serverPath, KCalCore::Incidence::Ptr incide
 
     Q_UNUSED(serverPath);
 
-    KCalCore::ICalFormat *icalFormat = new KCalCore::ICalFormat;
-    QString data = icalFormat->toICalString(incidence);
+    KCalCore::ICalFormat icalFormat;
+    QString data = icalFormat.toICalString(IncidenceHandler::incidenceToExport(incidence));
     if (data == NULL || data.isEmpty()) {
         LOG_WARNING("Error while converting iCal Object to string");
         return;
@@ -77,8 +77,8 @@ void Put::createEvent(const QString &serverPath, KCalCore::Incidence::Ptr incide
 {
     FUNCTION_CALL_TRACE;
 
-    KCalCore::ICalFormat *icalFormat = new KCalCore::ICalFormat;
-    QString ical = icalFormat->toICalString(incidence);
+    KCalCore::ICalFormat icalFormat;
+    QString ical = icalFormat.toICalString(IncidenceHandler::incidenceToExport(incidence));
     if (ical == NULL) {
         LOG_WARNING("Error while converting iCal Object to string");
         return;

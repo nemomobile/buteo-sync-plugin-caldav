@@ -404,6 +404,9 @@ bool NotebookSyncAgent::discardRemoteChanges(KCalCore::Incidence::List *localIns
         KCalCore::Incidence::Ptr sourceIncidence = *it;
         const QString &uid = sourceIncidence->uid();
         if (remoteDeletedIncidences.contains(uid) || serverModifiedUids.contains(uid)) {
+            LOG_DEBUG("Discarding modification,"
+                      << (remoteDeletedIncidences.contains(uid) ? "was already deleted on server" : "")
+                      << (serverModifiedUids.contains(uid) ? "was already modified on server": ""));
             it = localModified->erase(it);
             continue;
         } else if (modifications.contains(uid)) {
@@ -416,6 +419,7 @@ bool NotebookSyncAgent::discardRemoteChanges(KCalCore::Incidence::List *localIns
             }
             // If incidences are the same, then we assume the local incidence was not changed after
             // the remote incidence was received, and thus there are no modifications to report.
+            IncidenceHandler::prepareImportedIncidence(receivedIncidence);  // ensure fields are updated as per imported incidences
             if (IncidenceHandler::copiedPropertiesAreEqual(sourceIncidence, receivedIncidence)) {
                 LOG_DEBUG("Discarding modification" << uid);
                 it = localModified->erase(it);
@@ -595,8 +599,9 @@ bool NotebookSyncAgent::updateIncidences(const QList<Reader::CalendarResource> &
             continue;
         }
         if (storedIncidence) {
-            LOG_DEBUG("Updating existing event:" << newIncidence->uid());
+            LOG_DEBUG("Updating existing event:" << newIncidence->uid() << resource.href << resource.etag);
             storedIncidence->startUpdates();
+            IncidenceHandler::prepareImportedIncidence(newIncidence);
             IncidenceHandler::copyIncidenceProperties(storedIncidence, newIncidence);
             storedIncidence->setCustomProperty("buteo", "uri", resource.href);
             storedIncidence->setCustomProperty("buteo", "etag", resource.etag);
@@ -607,9 +612,9 @@ bool NotebookSyncAgent::updateIncidences(const QList<Reader::CalendarResource> &
             mModifiedIncidenceICalData.insert(newIncidence->uid(), resource.iCalData);
         } else {
             LOG_DEBUG("Saving new event:" << newIncidence->uid() << resource.href << resource.etag);
+            IncidenceHandler::prepareImportedIncidence(newIncidence);
             newIncidence->setCustomProperty("buteo", "uri", resource.href);
             newIncidence->setCustomProperty("buteo", "etag", resource.etag);
-            IncidenceHandler::prepareIncidenceProperties(newIncidence);
 
             bool added = false;
             switch (newIncidence->type()) {
