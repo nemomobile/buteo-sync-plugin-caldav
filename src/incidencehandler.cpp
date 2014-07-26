@@ -219,7 +219,6 @@ void IncidenceHandler::prepareImportedIncidence(KCalCore::Incidence::Ptr inciden
         return;
     }
     KCalCore::Event::Ptr event = incidence.staticCast<KCalCore::Event>();
-    KDateTime origLastModified = incidence->lastModified();
 
     if (event->allDay()) {
         KDateTime dtStart = event->dtStart();
@@ -230,7 +229,7 @@ void IncidenceHandler::prepareImportedIncidence(KCalCore::Incidence::Ptr inciden
             incidence->setCustomProperty("buteo", PROP_DTSTART_DATE_ONLY, PROP_DTSTART_DATE_ONLY);
             dtStart.setTime(QTime(0, 0, 0, 0));
             event->setDtStart(dtStart);
-            LOG_DEBUG("Added time to DTSTART, now" << dtStart.toString());
+            LOG_DEBUG("Added time to DTSTART, now" << dtStart.toString() << "for" << incidence->uid());
         } else {
             incidence->removeCustomProperty("buteo", PROP_DTSTART_DATE_ONLY);
         }
@@ -238,14 +237,13 @@ void IncidenceHandler::prepareImportedIncidence(KCalCore::Incidence::Ptr inciden
             incidence->setCustomProperty("buteo", PROP_DTEND_DATE_ONLY, PROP_DTEND_DATE_ONLY);
             dtEnd.setTime(QTime(0, 0, 0, 0));
             event->setDtEnd(dtEnd);
-            LOG_DEBUG("Added time to DTEND, now" << dtEnd.toString());
+            LOG_DEBUG("Added time to DTEND, now" << dtEnd.toString() << "for" << incidence->uid());
         } else {
             incidence->removeCustomProperty("buteo", PROP_DTEND_DATE_ONLY);
         }
         // setting dtStart/End changes the allDay value, so ensure it is still set to true
         event->setAllDay(true);
     }
-    event->setLastModified(origLastModified);
 }
 
 KCalCore::Incidence::Ptr IncidenceHandler::incidenceToExport(KCalCore::Incidence::Ptr sourceIncidence)
@@ -260,12 +258,12 @@ KCalCore::Incidence::Ptr IncidenceHandler::incidenceToExport(KCalCore::Incidence
         if (event->hasEndDate()) {
             KDateTime dt = event->dtEnd();
             // Event::dtEnd() is inclusive, but DTEND in iCalendar format is exclusive.
-            LOG_DEBUG("Adding +1 day to" << dt.toString() << "to make exclusive DTEND");
+            LOG_DEBUG("Adding +1 day to" << dt.toString() << "to make exclusive DTEND" << "for" << incidence->uid());
             dt = dt.addDays(1);
             event->setDtEnd(dt);
         } else {
             KDateTime dt = event->dtStart().addDays(1);
-            LOG_DEBUG("Adding DTEND of DTSTART+1" << dt.toString());
+            LOG_DEBUG("Adding DTEND of DTSTART+1" << dt.toString() << "for" << incidence->uid());
             event->setDtEnd(dt);
         }
     }
