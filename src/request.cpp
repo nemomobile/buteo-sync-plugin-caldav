@@ -161,8 +161,11 @@ QString Request::debuggingString(const QNetworkRequest &request, const QByteArra
     Q_FOREACH (const QByteArray &rawHeader, rawHeaderList) {
         text += rawHeader + " : " + request.rawHeader(rawHeader);
     }
-    text += "URL = " + request.url().toString();
-    text += "Request : \n" + data;
+    QUrl censoredUrl = request.url();
+    censoredUrl.setUserName(QStringLiteral("user"));
+    censoredUrl.setPassword(QStringLiteral("pass"));
+    text += "URL = " + censoredUrl.toString();
+    text += "Request : " + REQUEST_TYPE +  "\n" + data;
     text += "---------------------------------------------------------------------\n";
     return text.join(QChar('\n'));
 }
