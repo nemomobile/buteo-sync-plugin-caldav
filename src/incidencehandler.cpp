@@ -31,6 +31,7 @@
 
 #define PROP_DTSTART_DATE_ONLY "dtstart-date_only"
 #define PROP_DTEND_DATE_ONLY "dtend-date_only"
+#define PROP_DTEND_ADDED_USING_DTSTART "dtend-added-as-dtstart"
 
 IncidenceHandler::IncidenceHandler()
 {
@@ -241,6 +242,16 @@ void IncidenceHandler::prepareImportedIncidence(KCalCore::Incidence::Ptr inciden
         } else {
             incidence->removeCustomProperty("buteo", PROP_DTEND_DATE_ONLY);
         }
+
+        // calendar processing requires all-day events to have a dtEnd
+        if (!event->hasEndDate()) {
+            LOG_DEBUG("Adding DTEND to" << incidence->uid() << "as" << dtStart.toString());
+            event->setCustomProperty("buteo", PROP_DTEND_ADDED_USING_DTSTART, PROP_DTEND_ADDED_USING_DTSTART);
+            event->setDtEnd(dtStart);
+        } else {
+            event->removeCustomProperty("buteo", PROP_DTSTART_DATE_ONLY);
+        }
+
         // setting dtStart/End changes the allDay value, so ensure it is still set to true
         event->setAllDay(true);
     }
@@ -255,7 +266,17 @@ KCalCore::Incidence::Ptr IncidenceHandler::incidenceToExport(KCalCore::Incidence
     KCalCore::Event::Ptr event = incidence.staticCast<KCalCore::Event>();
 
     if (event->allDay()) {
-        if (event->hasEndDate()) {
+        bool sendWithoutDtEnd = !event->customProperty("buteo", PROP_DTEND_ADDED_USING_DTSTART).isEmpty()
+                && (event->dtStart() == event->dtEnd());
+        event->removeCustomProperty("buteo", PROP_DTEND_ADDED_USING_DTSTART);
+
+        if (sendWithoutDtEnd) {
+            // A single-day all-day event was received without a DTEND, and it is still a single-day
+            // all-day event, so remove the DTEND before upsyncing.
+            LOG_DEBUG("Remove DTEND from" << incidence->uid());
+            event->setDtEnd(KDateTime());
+            event->setHasEndDate(false);
+        } else if (event->hasEndDate()) {
             KDateTime dt = event->dtEnd();
             // Event::dtEnd() is inclusive, but DTEND in iCalendar format is exclusive.
             LOG_DEBUG("Adding +1 day to" << dt.toString() << "to make exclusive DTEND" << "for" << incidence->uid());
