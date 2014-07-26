@@ -105,6 +105,7 @@ void Report::getAllEvents(const QString &serverPath, const QDateTime &fromDateTi
 }
 
 void Report::getAllETags(const QString &serverPath,
+                         const QHash<QString, QString> &localIncidenceETags,
                          const KCalCore::Incidence::List &currentLocalIncidences,
                          const KCalCore::Incidence::List &localDeletedIncidences,
                          const QDateTime &fromDateTime,
@@ -112,6 +113,7 @@ void Report::getAllETags(const QString &serverPath,
 {
     FUNCTION_CALL_TRACE;
     mServerPath = serverPath;
+    mLocalIncidenceETags = localIncidenceETags;
     mLocalIncidences = currentLocalIncidences;
     mLocalDeletedIncidences = localDeletedIncidences;
 
@@ -266,7 +268,10 @@ void Report::processETags()
                 continue;
             } else {
                 Reader::CalendarResource resource = map.take(uri);
-                if (incidence->customProperty("buteo", "etag") != resource.etag) {
+                if (mLocalIncidenceETags.value(incidence->uid()) != resource.etag) {
+                    LOG_DEBUG("Will fetch update for" << resource.href
+                              << "tag changed from" << mLocalIncidenceETags.value(incidence->uid())
+                              << "to" << resource.etag);
                     eventIdList.append(resource.href);
                 }
             }
@@ -284,6 +289,7 @@ void Report::processETags()
                 }
             }
         }
+        LOG_DEBUG("Fetching new incidences:" << map.keys());
         eventIdList.append(map.keys());
         if (!eventIdList.isEmpty()) {
             // some incidences have changed on the server, so fetch the new details

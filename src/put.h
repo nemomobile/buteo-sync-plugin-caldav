@@ -43,14 +43,17 @@ class Put : public Request
 public:
     explicit Put(QNetworkAccessManager *manager, Settings *settings, QObject *parent = 0);
 
-    void updateEvent(const QString &serverPath, KCalCore::Incidence::Ptr incidence);
+    void updateEvent(const QString &serverPath, KCalCore::Incidence::Ptr incidence, const QString &eTag);
     void createEvent(const QString &serverPath, KCalCore::Incidence::Ptr incidence);
+
+    QHash<QString,QString> updatedETags() const;
 
 private Q_SLOTS:
     void requestFinished();
 
 private:
     QStringList mUidList;
+    QHash<QString,QString> mUpdatedETags;
 };
 
 #endif // PUT_H

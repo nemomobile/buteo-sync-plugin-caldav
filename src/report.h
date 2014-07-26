@@ -43,6 +43,7 @@ public:
 
     void getAllEvents(const QString &serverPath, const QDateTime &fromDateTime, const QDateTime &toDateTime);
     void getAllETags(const QString &serverPath,
+                     const QHash<QString, QString> &localIncidenceETags,
                      const KCalCore::Incidence::List &currentLocalIncidences,
                      const KCalCore::Incidence::List &localDeletedIncidences,
                      const QDateTime &fromDateTime,
@@ -59,6 +60,7 @@ private:
     void multiGetEvents(const QString &serverPath, const QStringList &eventIdList);
     bool initRequest(const QString &serverPath);
 
+    QHash<QString, QString> mLocalIncidenceETags;
     QList<Reader::CalendarResource> mReceivedResources;
     QStringList mLocalIncidenceUidsNotOnServer;
     KCalCore::Incidence::List mLocalIncidences;

@@ -180,6 +180,13 @@ void NotebookSyncAgent::startQuickSync(mKCal::Notebook::Ptr notebook,
     mFromDateTime = fromDateTime;
     mToDateTime = toDateTime;
 
+    bool ok = false;
+    mLocalETags = mDatabase->eTags(mNotebook->uid(), &ok);
+    if (!ok) {
+        emitFinished(Buteo::SyncResults::DATABASE_FAILURE, QString("Unable to load etags for notebook: %1").arg(mNotebook->uid()));
+        return;
+    }
+
     sendReportRequest();
 }
 
@@ -201,9 +208,12 @@ void NotebookSyncAgent::finalize()
 
     LOG_DEBUG("Writing" << mNewRemoteIncidenceIds.count() << "insertions,"
               << mModifiedIncidenceICalData.count() << "modifications"
-              << mIncidenceUidsToDelete.count() << "deletions");
+              << mIncidenceUidsToDelete.count() << "deletions"
+              << mUpdatedETags.count() << "updated etags");
 
-    mDatabase->removeEntries(mNotebook->uid());
+    // remove additions, modifications and deletions from the last sync session
+    // (don't call removeEntries() as that clears etags also)
+    mDatabase->removeIncidenceChangeEntriesOnly(mNotebook->uid());
 
     if (mNewRemoteIncidenceIds.count()) {
         mDatabase->insertAdditions(mNotebook->uid(), mNewRemoteIncidenceIds);
@@ -216,6 +226,10 @@ void NotebookSyncAgent::finalize()
     if (mIncidenceUidsToDelete.count()) {
         mDatabase->insertDeletions(mNotebook->uid(), mIncidenceUidsToDelete);
         mIncidenceUidsToDelete.clear();
+    }
+    if (mUpdatedETags.count()) {
+        mDatabase->insertETags(mNotebook->uid(), mUpdatedETags);
+        mUpdatedETags.clear();
     }
 }
 
@@ -247,7 +261,7 @@ void NotebookSyncAgent::fetchRemoteChanges(const QDateTime &fromDateTime, const 
     if (!mStorage->deletedIncidences(&deletions, KDateTime(mChangesSinceDate), mNotebook->uid())) {
         LOG_CRITICAL("mKCal::ExtendedStorage::deletedIncidences() failed");
     }
-    report->getAllETags(mServerPath, storageIncidenceList, deletions, fromDateTime, toDateTime);
+    report->getAllETags(mServerPath, mLocalETags, storageIncidenceList, deletions, fromDateTime, toDateTime);
 }
 
 void NotebookSyncAgent::sendLocalChanges()
@@ -281,7 +295,7 @@ void NotebookSyncAgent::sendLocalChanges()
         Put *put = new Put(mNAManager, mSettings);
         mRequests.insert(put);
         connect(put, SIGNAL(finished()), this, SLOT(nonReportRequestFinished()));
-        put->updateEvent(mServerPath, modified[i]);
+        put->updateEvent(mServerPath, modified[i], mLocalETags.value(modified[i]->uid()));
     }
     for (int i=0; i<deleted.count(); i++) {
         Delete *del = new Delete(mNAManager, mSettings);
@@ -529,14 +543,23 @@ void NotebookSyncAgent::nonReportRequestFinished()
         return;
     }
     mRequests.remove(request);
-    request->deleteLater();
 
     if (request->errorCode() != Buteo::SyncResults::NO_ERROR) {
         LOG_CRITICAL("Aborting sync," << request->command() << "failed" << request->errorString() << "for notebook:" << mNotebook->account());
         emitFinished(Buteo::SyncResults::INTERNAL_ERROR, request->errorString());
-    } else if (mRequests.isEmpty()) {
-        emitFinished(Buteo::SyncResults::NO_ERROR, QStringLiteral("Finished requests for %1").arg(mNotebook->account()));
+    } else {
+        Put *putRequest = qobject_cast<Put*>(request);
+        if (putRequest) {
+            QHash<QString, QString> updatedETags = putRequest->updatedETags();
+            Q_FOREACH (const QString &incidenceUid, updatedETags.keys()) {
+                mUpdatedETags[incidenceUid] = updatedETags[incidenceUid];
+            }
+        }
+        if (mRequests.isEmpty()) {
+            emitFinished(Buteo::SyncResults::NO_ERROR, QStringLiteral("Finished requests for %1").arg(mNotebook->account()));
+        }
     }
+    request->deleteLater();
 }
 
 void NotebookSyncAgent::emitFinished(int minorErrorCode, const QString &message)
@@ -604,17 +627,19 @@ bool NotebookSyncAgent::updateIncidences(const QList<Reader::CalendarResource> &
             IncidenceHandler::prepareImportedIncidence(newIncidence);
             IncidenceHandler::copyIncidenceProperties(storedIncidence, newIncidence);
             storedIncidence->setCustomProperty("buteo", "uri", resource.href);
-            storedIncidence->setCustomProperty("buteo", "etag", resource.etag);
             storedIncidence->endUpdates();
 
             // Save the modified incidence so it can be used to check whether there were
             // local changes on the next sync.
             mModifiedIncidenceICalData.insert(newIncidence->uid(), resource.iCalData);
+
+            // Save the incidence etag.
+            mUpdatedETags[newIncidence->uid()] = resource.etag;
         } else {
             LOG_DEBUG("Saving new event:" << newIncidence->uid() << resource.href << resource.etag);
             IncidenceHandler::prepareImportedIncidence(newIncidence);
             newIncidence->setCustomProperty("buteo", "uri", resource.href);
-            newIncidence->setCustomProperty("buteo", "etag", resource.etag);
+            mUpdatedETags[newIncidence->uid()] = resource.etag;
 
             bool added = false;
             switch (newIncidence->type()) {
