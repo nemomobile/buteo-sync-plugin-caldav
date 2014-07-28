@@ -306,6 +306,8 @@ KCalCore::Incidence::Ptr IncidenceHandler::incidenceToExport(KCalCore::Incidence
     }
 
     event->removeCustomProperty("buteo", "uri");
+
+    // We used to add this custom property and upsync with it still intact. Make sure it's removed
     event->removeCustomProperty("buteo", "etag");
 
     return incidence;

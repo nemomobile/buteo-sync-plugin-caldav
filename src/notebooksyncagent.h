@@ -106,6 +106,8 @@ private:
     QList<Reader::CalendarResource> mReceivedCalendarResources;
     QStringList mNewRemoteIncidenceIds;
     QHash<QString,QString> mModifiedIncidenceICalData;
+    QHash<QString,QString> mLocalETags;
+    QHash<QString,QString> mUpdatedETags;
     QStringList mIncidenceUidsToDelete;
     QSet<Request *> mRequests;
     QNetworkAccessManager* mNAManager;

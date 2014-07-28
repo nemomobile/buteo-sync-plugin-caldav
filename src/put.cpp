@@ -37,12 +37,14 @@
 
 #include <LogMacros.h>
 
+#define PROP_INCIDENCE_UID "uid"
+
 Put::Put(QNetworkAccessManager *manager, Settings *settings, QObject *parent)
     : Request(manager, settings, "PUT", parent)
 {
 }
 
-void Put::updateEvent(const QString &serverPath, KCalCore::Incidence::Ptr incidence)
+void Put::updateEvent(const QString &serverPath, KCalCore::Incidence::Ptr incidence, const QString &eTag)
 {
     FUNCTION_CALL_TRACE;
 
@@ -54,19 +56,19 @@ void Put::updateEvent(const QString &serverPath, KCalCore::Incidence::Ptr incide
         LOG_WARNING("Error while converting iCal Object to string");
         return;
     }
-    QString etag = incidence->customProperty("buteo", "etag");
     QString uri  = incidence->customProperty("buteo", "uri");
     mUidList.append(incidence->uid());
     QNetworkRequest request;
 
     // 'uri' contains the calendar path + filename
     prepareRequest(&request, uri);
-    request.setRawHeader("If-Match", etag.toLatin1());
+    request.setRawHeader("If-Match", eTag.toLatin1());
     request.setHeader(QNetworkRequest::ContentTypeHeader, "text/calendar; charset=utf-8");
 
     QBuffer *buffer = new QBuffer(this);
     buffer->setData(data.toLatin1());
     QNetworkReply *reply = mNAManager->sendCustomRequest(request, REQUEST_TYPE.toLatin1(), buffer);
+    reply->setProperty(PROP_INCIDENCE_UID, incidence->uid());
     debugRequest(request, data);
     connect(reply, SIGNAL(finished()), this, SLOT(requestFinished()));
     connect(reply, SIGNAL(sslErrors(QList<QSslError>)),
@@ -95,6 +97,7 @@ void Put::createEvent(const QString &serverPath, KCalCore::Incidence::Ptr incide
     QBuffer *buffer = new QBuffer(this);
     buffer->setData(ical.toLatin1());
     QNetworkReply *reply = mNAManager->sendCustomRequest(request, REQUEST_TYPE.toLatin1(), buffer);
+    reply->setProperty(PROP_INCIDENCE_UID, incidence->uid());
     debugRequest(request, ical);
     connect(reply, SIGNAL(finished()), this, SLOT(requestFinished()));
     connect(reply, SIGNAL(sslErrors(QList<QSslError>)),
@@ -117,6 +120,18 @@ void Put::requestFinished()
     }
     debugReplyAndReadAll(reply);
 
+    // Server may update the etag as soon as the modification is received and send back a new etag
+    Q_FOREACH (const QNetworkReply::RawHeaderPair &header, reply->rawHeaderPairs()) {
+        if (header.first.toLower() == QStringLiteral("etag")) {
+            mUpdatedETags.insert(reply->property(PROP_INCIDENCE_UID).toString(), header.second);
+        }
+    }
+
     finishedWithReplyResult(reply->error());
     reply->deleteLater();
+}
+
+QHash<QString,QString> Put::updatedETags() const
+{
+    return mUpdatedETags;
 }
