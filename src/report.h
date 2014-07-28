@@ -41,13 +41,15 @@ class Report : public Request
 public:
     explicit Report(QNetworkAccessManager *manager, Settings *settings, QObject *parent = 0);
 
-    void getAllEvents(const QString &serverPath, const QDateTime &fromDateTime, const QDateTime &toDateTime);
+    void getAllEvents(const QString &serverPath,
+                      const QDateTime &fromDateTime = QDateTime(),
+                      const QDateTime &toDateTime = QDateTime());
     void getAllETags(const QString &serverPath,
                      const QHash<QString, QString> &localIncidenceETags,
                      const KCalCore::Incidence::List &currentLocalIncidences,
                      const KCalCore::Incidence::List &localDeletedIncidences,
-                     const QDateTime &fromDateTime,
-                     const QDateTime &toDateTime);
+                     const QDateTime &fromDateTime = QDateTime(),
+                     const QDateTime &toDateTime = QDateTime());
 
     QList<Reader::CalendarResource> receivedCalendarResources() const;
     QStringList localIncidenceUidsNotOnServer() const;

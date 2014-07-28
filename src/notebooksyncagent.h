@@ -86,7 +86,7 @@ private:
     void clearRequests();
     void emitFinished(int minorErrorCode, const QString &message);
 
-    void fetchRemoteChanges(const QDateTime &fromDateTime, const QDateTime &toDateTime);
+    void fetchRemoteChanges();
     bool updateIncidences(const QList<Reader::CalendarResource> &resources);
     bool deleteIncidences(const QStringList &incidenceUids);
 
