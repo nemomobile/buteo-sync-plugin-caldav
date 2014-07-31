@@ -33,12 +33,11 @@
 #define PROP_DTEND_DATE_ONLY "dtend-date_only"
 #define PROP_DTEND_ADDED_USING_DTSTART "dtend-added-as-dtstart"
 
-IncidenceHandler::IncidenceHandler()
-{
-}
-
-IncidenceHandler::~IncidenceHandler()
-{
+#define COPY_IF_NOT_EQUAL(dest, src, get, set) \
+{ \
+    if (dest->get != src->get) { \
+        dest->set(src->get); \
+    } \
 }
 
 #define RETURN_FALSE_IF_NOT_EQUAL(a, b, func, desc) {\
@@ -55,12 +54,34 @@ IncidenceHandler::~IncidenceHandler()
     }\
 }
 
+IncidenceHandler::IncidenceHandler()
+{
+}
+
+IncidenceHandler::~IncidenceHandler()
+{
+}
+
 void IncidenceHandler::normalizePersonEmail(KCalCore::Person *p)
 {
     QString email = p->email().replace(QStringLiteral("mailto:"), QString(), Qt::CaseInsensitive);
     if (email != p->email()) {
         p->setEmail(email);
     }
+}
+
+template <typename T>
+bool IncidenceHandler::pointerDataEqual(const QVector<QSharedPointer<T> > &vectorA, const QVector<QSharedPointer<T> > &vectorB)
+{
+    if (vectorA.count() != vectorB.count()) {
+        return false;
+    }
+    for (int i=0; i<vectorA.count(); i++) {
+        if (vectorA[i].data() != vectorB[i].data()) {
+            return false;
+        }
+    }
+    return true;
 }
 
 // Checks whether a specific set of properties are equal.
@@ -173,15 +194,8 @@ void IncidenceHandler::copyIncidenceProperties(KCalCore::Incidence::Ptr dest, co
     KDateTime origCreated = dest->created();
     KDateTime origLastModified = dest->lastModified();
 
-    if (dest->type() == KCalCore::IncidenceBase::TypeEvent && src->type() == KCalCore::IncidenceBase::TypeEvent) {
-        KCalCore::Event::Ptr destEvent = dest.staticCast<KCalCore::Event>();
-        KCalCore::Event::Ptr srcEvent = src.staticCast<KCalCore::Event>();
-        destEvent->setDtEnd(srcEvent->dtEnd());
-        destEvent->setHasEndDate(srcEvent->hasEndDate());
-        destEvent->setTransparency(srcEvent->transparency());
-    }
-
     // Recurrences need to be copied through serialization, else they are not recreated.
+    // Do this first to avoid overriding other copied properties.
     dest->clearRecurrence();
     QBuffer buffer;
     buffer.open(QBuffer::ReadWrite);
@@ -191,56 +205,81 @@ void IncidenceHandler::copyIncidenceProperties(KCalCore::Incidence::Ptr dest, co
     buffer.seek(0);
     in >> *dest.data();
 
+    // copy the duration before the dtEnd as calling setDuration() changes the dtEnd
+    COPY_IF_NOT_EQUAL(dest, src, duration(), setDuration);
+
+    if (dest->type() == KCalCore::IncidenceBase::TypeEvent && src->type() == KCalCore::IncidenceBase::TypeEvent) {
+        KCalCore::Event::Ptr destEvent = dest.staticCast<KCalCore::Event>();
+        KCalCore::Event::Ptr srcEvent = src.staticCast<KCalCore::Event>();
+        COPY_IF_NOT_EQUAL(destEvent, srcEvent, dtEnd(), setDtEnd);
+        COPY_IF_NOT_EQUAL(destEvent, srcEvent, hasEndDate(), setHasEndDate);
+        COPY_IF_NOT_EQUAL(destEvent, srcEvent, transparency(), setTransparency);
+    }
+
     // dtStart and dtEnd changes allDay value, so must set those before copying allDay value
-    dest->setDtStart(src->dtStart());
-    dest->setAllDay(src->allDay());
+    COPY_IF_NOT_EQUAL(dest, src, dtStart(), setDtStart);
+    COPY_IF_NOT_EQUAL(dest, src, allDay(), setAllDay);
 
-    dest->setDuration(src->duration());
-    dest->setHasDuration(src->hasDuration());
-    dest->setOrganizer(src->organizer());
-    dest->setReadOnly(src->isReadOnly());
+    COPY_IF_NOT_EQUAL(dest, src, hasDuration(), setHasDuration);
+    COPY_IF_NOT_EQUAL(dest, src, organizer(), setOrganizer);
+    COPY_IF_NOT_EQUAL(dest, src, isReadOnly(), setReadOnly);
 
-    dest->clearAttendees();
-    Q_FOREACH (const KCalCore::Attendee::Ptr &attendee, src->attendees()) {
-        dest->addAttendee(attendee);
-    }
-    dest->clearComments();
-    Q_FOREACH (const QString &comment, src->comments()) {
-        dest->addComment(comment);
-    }
-    dest->clearContacts();
-    Q_FOREACH (const QString &contact, src->contacts()) {
-        dest->addContact(contact);
+    if (!pointerDataEqual(src->attendees(), dest->attendees())) {
+        dest->clearAttendees();
+        Q_FOREACH (const KCalCore::Attendee::Ptr &attendee, src->attendees()) {
+            dest->addAttendee(attendee);
+        }
     }
 
-    dest->setAltDescription(src->altDescription());
-    dest->setCategories(src->categories());
-    dest->setCustomStatus(src->customStatus());
-    dest->setDescription(src->description());
-    dest->setGeoLatitude(src->geoLatitude());
-    dest->setGeoLongitude(src->geoLongitude());
-    dest->setHasGeo(src->hasGeo());
-    dest->setLocation(src->location());
-    dest->setResources(src->resources());
-    dest->setSecrecy(src->secrecy());
-    dest->setStatus(src->status());
-    dest->setSummary(src->summary());
-    dest->setRevision(src->revision());
-
-    dest->clearAlarms();
-    Q_FOREACH (const KCalCore::Alarm::Ptr &alarm, src->alarms()) {
-        dest->addAlarm(alarm);
+    if (src->comments() != dest->comments()) {
+        dest->clearComments();
+        Q_FOREACH (const QString &comment, src->comments()) {
+            dest->addComment(comment);
+        }
+    }
+    if (src->contacts() != dest->contacts()) {
+        dest->clearContacts();
+        Q_FOREACH (const QString &contact, src->contacts()) {
+            dest->addContact(contact);
+        }
     }
 
-    dest->clearAttachments();
-    Q_FOREACH (const KCalCore::Attachment::Ptr &attachment, src->attachments()) {
-        dest->addAttachment(attachment);
+    COPY_IF_NOT_EQUAL(dest, src, altDescription(), setAltDescription);
+    COPY_IF_NOT_EQUAL(dest, src, categories(), setCategories);
+    COPY_IF_NOT_EQUAL(dest, src, customStatus(), setCustomStatus);
+    COPY_IF_NOT_EQUAL(dest, src, description(), setDescription);
+    COPY_IF_NOT_EQUAL(dest, src, geoLatitude(), setGeoLatitude);
+    COPY_IF_NOT_EQUAL(dest, src, geoLongitude(), setGeoLongitude);
+    COPY_IF_NOT_EQUAL(dest, src, hasGeo(), setHasGeo);
+    COPY_IF_NOT_EQUAL(dest, src, location(), setLocation);
+    COPY_IF_NOT_EQUAL(dest, src, resources(), setResources);
+    COPY_IF_NOT_EQUAL(dest, src, secrecy(), setSecrecy);
+    COPY_IF_NOT_EQUAL(dest, src, status(), setStatus);
+    COPY_IF_NOT_EQUAL(dest, src, summary(), setSummary);
+    COPY_IF_NOT_EQUAL(dest, src, revision(), setRevision);
+
+    if (!pointerDataEqual(src->alarms(), dest->alarms())) {
+        dest->clearAlarms();
+        Q_FOREACH (const KCalCore::Alarm::Ptr &alarm, src->alarms()) {
+            dest->addAlarm(alarm);
+        }
+    }
+
+    if (!pointerDataEqual(src->attachments(), dest->attachments())) {
+        dest->clearAttachments();
+        Q_FOREACH (const KCalCore::Attachment::Ptr &attachment, src->attachments()) {
+            dest->addAttachment(attachment);
+        }
     }
 
     // Don't change created and lastModified properties as that affects mkcal
     // calculations for when the incidence was added and modified in the db.
-    dest->setCreated(origCreated);
-    dest->setLastModified(origLastModified);
+    if (origCreated != dest->created()) {
+        dest->setCreated(origCreated);
+    }
+    if (origLastModified != dest->lastModified()) {
+        dest->setLastModified(origLastModified);
+    }
 }
 
 void IncidenceHandler::prepareImportedIncidence(KCalCore::Incidence::Ptr incidence)
