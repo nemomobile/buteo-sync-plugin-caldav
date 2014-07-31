@@ -41,6 +41,28 @@ IncidenceHandler::~IncidenceHandler()
 {
 }
 
+#define RETURN_FALSE_IF_NOT_EQUAL(a, b, func, desc) {\
+    if (a->func != b->func) {\
+        LOG_DEBUG("Incidence" << desc << "" << "properties are not equal:" << a->func << b->func); \
+        return false;\
+    }\
+}
+
+#define RETURN_FALSE_IF_NOT_EQUAL_CUSTOM(failureCheck, desc, debug) {\
+    if (failureCheck) {\
+        LOG_DEBUG("Incidence" << desc << "properties are not equal:" << desc << debug); \
+        return false;\
+    }\
+}
+
+void IncidenceHandler::normalizePersonEmail(KCalCore::Person *p)
+{
+    QString email = p->email().replace(QStringLiteral("mailto:"), QString(), Qt::CaseInsensitive);
+    if (email != p->email()) {
+        p->setEmail(email);
+    }
+}
+
 // Checks whether a specific set of properties are equal.
 bool IncidenceHandler::copiedPropertiesAreEqual(const KCalCore::Incidence::Ptr &a, const KCalCore::Incidence::Ptr &b)
 {
@@ -54,28 +76,31 @@ bool IncidenceHandler::copiedPropertiesAreEqual(const KCalCore::Incidence::Ptr &
     // TODO compare deref alarms and attachment lists to compare them also.
     // Don't compare resources() for now because KCalCore may insert QStringList("") as the resources
     // when in fact it should be QStringList(), which causes the comparison to fail.
-    if (a->type() != b->type()
-            || a->allDay() != b->allDay()
-            || a->duration() != b->duration()
-            || a->hasDuration() != b->hasDuration()
-            || *a->organizer().data() != *b->organizer().data()
-            || a->isReadOnly() != b->isReadOnly()
-            || a->dtStart() != b->dtStart()
-            || a->comments() != b->comments()
-            || a->contacts() != b->contacts()
-            || a->altDescription() != b->altDescription()
-            || a->categories() != b->categories()
-            || a->customStatus() != b->customStatus()
-            || a->description() != b->description()
-            || !qFuzzyCompare(a->geoLatitude(), b->geoLatitude())
-            || !qFuzzyCompare(a->geoLongitude(), b->geoLongitude())
-            || a->hasGeo() != b->hasGeo()
-            || a->location() != b->location()
-            || a->secrecy() != b->secrecy()
-            || a->status() != b->status()
-            || a->summary() != b->summary()) {
-        return false;
-    }
+    RETURN_FALSE_IF_NOT_EQUAL(a, b, type(), "type");
+    RETURN_FALSE_IF_NOT_EQUAL(a, b, duration(), "duration");
+    RETURN_FALSE_IF_NOT_EQUAL(a, b, hasDuration(), "hasDuration");
+    RETURN_FALSE_IF_NOT_EQUAL(a, b, isReadOnly(), "isReadOnly");
+    RETURN_FALSE_IF_NOT_EQUAL_CUSTOM(a->dtStart() != b->dtStart(), "dtStart", (a->dtStart().toString() + " " + b->dtStart().toString()));
+    RETURN_FALSE_IF_NOT_EQUAL(a, b, comments(), "comments");
+    RETURN_FALSE_IF_NOT_EQUAL(a, b, contacts(), "contacts");
+    RETURN_FALSE_IF_NOT_EQUAL(a, b, altDescription(), "altDescription");
+    RETURN_FALSE_IF_NOT_EQUAL(a, b, categories(), "categories");
+    RETURN_FALSE_IF_NOT_EQUAL(a, b, customStatus(), "customStatus");
+    RETURN_FALSE_IF_NOT_EQUAL(a, b, description(), "description");
+    RETURN_FALSE_IF_NOT_EQUAL_CUSTOM(!qFuzzyCompare(a->geoLatitude(), b->geoLatitude()), "geoLatitude", (QString("%1 %2").arg(a->geoLatitude()).arg(b->geoLatitude())));
+    RETURN_FALSE_IF_NOT_EQUAL_CUSTOM(!qFuzzyCompare(a->geoLongitude(), b->geoLongitude()), "geoLongitude", (QString("%1 %2").arg(a->geoLongitude()).arg(b->geoLongitude())));
+    RETURN_FALSE_IF_NOT_EQUAL(a, b, hasGeo(), "hasGeo");
+    RETURN_FALSE_IF_NOT_EQUAL(a, b, location(), "location");
+    RETURN_FALSE_IF_NOT_EQUAL(a, b, secrecy(), "secrecy");
+    RETURN_FALSE_IF_NOT_EQUAL(a, b, status(), "status");
+    RETURN_FALSE_IF_NOT_EQUAL(a, b, summary(), "summary");
+
+    // Some servers insert a mailto: in the organizer email address, so ignore this when comparing organizers
+    KCalCore::Person personA(*a->organizer().data());
+    KCalCore::Person personB(*b->organizer().data());
+    normalizePersonEmail(&personA);
+    normalizePersonEmail(&personB);
+    RETURN_FALSE_IF_NOT_EQUAL_CUSTOM(personA != personB, "organizer", (personA.fullName() + " " + personB.fullName()));
 
     switch (a->type()) {
     case KCalCore::IncidenceBase::TypeEvent:
@@ -102,32 +127,33 @@ bool IncidenceHandler::copiedPropertiesAreEqual(const KCalCore::Incidence::Ptr &
 
 bool IncidenceHandler::eventsEqual(const KCalCore::Event::Ptr &a, const KCalCore::Event::Ptr &b)
 {
-    return a->hasEndDate() == b->hasEndDate()
-            && a->dateEnd() == b->dateEnd()
-            && a->dtEnd() == a->dtEnd()
-            && a->isMultiDay() == b->isMultiDay()
-            && a->transparency() == b->transparency();
+    RETURN_FALSE_IF_NOT_EQUAL_CUSTOM(a->dateEnd() != b->dateEnd(), "dateEnd", (a->dateEnd().toString() + " " + b->dateEnd().toString()));
+    RETURN_FALSE_IF_NOT_EQUAL_CUSTOM(a->dtEnd() != b->dtEnd(), "dtEnd", (a->dtEnd().toString() + " " + b->dtEnd().toString()));
+    RETURN_FALSE_IF_NOT_EQUAL(a, b, hasEndDate(), "hasEndDate");
+    RETURN_FALSE_IF_NOT_EQUAL(a, b, isMultiDay(), "isMultiDay");
+    RETURN_FALSE_IF_NOT_EQUAL(a, b, transparency(), "transparency");
+    return true;
 }
 
 bool IncidenceHandler::todosEqual(const KCalCore::Todo::Ptr &a, const KCalCore::Todo::Ptr &b)
 {
-    return a->hasCompletedDate() == b->hasCompletedDate()
-            && a->dtRecurrence() == a->dtRecurrence()
-            && a->dtStart() == b->dtStart()
-            && a->hasDueDate() == b->hasDueDate()
-            && a->dtDue() == b->dtDue()
-            && a->hasStartDate() == b->hasStartDate()
-            && a->isCompleted() == b->isCompleted()
-            && a->completed() == b->completed()
-            && a->isOpenEnded() == b->isOpenEnded()
-            && a->isOverdue() == b->isOverdue()
-            && a->mimeType() == b->mimeType()
-            && a->percentComplete() == b->percentComplete();
+    RETURN_FALSE_IF_NOT_EQUAL(a, b, hasCompletedDate(), "hasCompletedDate");
+    RETURN_FALSE_IF_NOT_EQUAL_CUSTOM(a->dtRecurrence() != b->dtRecurrence(), "dtRecurrence", (a->dtRecurrence().toString() + " " + b->dtRecurrence().toString()));
+    RETURN_FALSE_IF_NOT_EQUAL(a, b, hasDueDate(), "hasDueDate");
+    RETURN_FALSE_IF_NOT_EQUAL_CUSTOM(a->dtDue() != b->dtDue(), "dtDue", (a->dtDue().toString() + " " + b->dtDue().toString()));
+    RETURN_FALSE_IF_NOT_EQUAL(a, b, hasStartDate(), "hasStartDate");
+    RETURN_FALSE_IF_NOT_EQUAL(a, b, isCompleted(), "isCompleted");
+    RETURN_FALSE_IF_NOT_EQUAL_CUSTOM(a->completed() != b->completed(), "completed", (a->completed().toString() + " " + b->completed().toString()));
+    RETURN_FALSE_IF_NOT_EQUAL(a, b, isOpenEnded(), "isOpenEnded");
+    RETURN_FALSE_IF_NOT_EQUAL(a, b, mimeType(), "mimeType");
+    RETURN_FALSE_IF_NOT_EQUAL(a, b, percentComplete(), "percentComplete");
+    return true;
 }
 
 bool IncidenceHandler::journalsEqual(const KCalCore::Journal::Ptr &a, const KCalCore::Journal::Ptr &b)
 {
-    return a->mimeType() == b->mimeType();
+    RETURN_FALSE_IF_NOT_EQUAL(a, b, mimeType(), "mimeType");
+    return true;
 }
 
 void IncidenceHandler::copyIncidenceProperties(KCalCore::Incidence::Ptr dest, const KCalCore::Incidence::Ptr &src)
