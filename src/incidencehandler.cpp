@@ -129,9 +129,12 @@ bool IncidenceHandler::eventsEqual(const KCalCore::Event::Ptr &a, const KCalCore
 {
     RETURN_FALSE_IF_NOT_EQUAL_CUSTOM(a->dateEnd() != b->dateEnd(), "dateEnd", (a->dateEnd().toString() + " " + b->dateEnd().toString()));
     RETURN_FALSE_IF_NOT_EQUAL_CUSTOM(a->dtEnd() != b->dtEnd(), "dtEnd", (a->dtEnd().toString() + " " + b->dtEnd().toString()));
-    RETURN_FALSE_IF_NOT_EQUAL(a, b, hasEndDate(), "hasEndDate");
     RETURN_FALSE_IF_NOT_EQUAL(a, b, isMultiDay(), "isMultiDay");
     RETURN_FALSE_IF_NOT_EQUAL(a, b, transparency(), "transparency");
+
+    // Don't compare hasEndDate() as Event(Event*) does not initialize it based on the validity of
+    // dtEnd(), so it could be false when dtEnd() is valid. The dtEnd comparison above is sufficient.
+
     return true;
 }
 
@@ -260,7 +263,7 @@ void IncidenceHandler::prepareImportedIncidence(KCalCore::Incidence::Ptr inciden
         } else {
             incidence->removeCustomProperty("buteo", PROP_DTSTART_DATE_ONLY);
         }
-        if (event->hasEndDate() && dtEnd.isDateOnly()) {
+        if (dtEnd.isValid() && dtEnd.isDateOnly()) {
             incidence->setCustomProperty("buteo", PROP_DTEND_DATE_ONLY, PROP_DTEND_DATE_ONLY);
             dtEnd.setTime(QTime(0, 0, 0, 0));
             event->setDtEnd(dtEnd);
@@ -270,7 +273,7 @@ void IncidenceHandler::prepareImportedIncidence(KCalCore::Incidence::Ptr inciden
         }
 
         // calendar processing requires all-day events to have a dtEnd
-        if (!event->hasEndDate()) {
+        if (!dtEnd.isValid()) {
             LOG_DEBUG("Adding DTEND to" << incidence->uid() << "as" << dtStart.toString());
             event->setCustomProperty("buteo", PROP_DTEND_ADDED_USING_DTSTART, PROP_DTEND_ADDED_USING_DTSTART);
             event->setDtEnd(dtStart);
