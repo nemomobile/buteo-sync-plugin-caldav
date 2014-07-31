@@ -29,6 +29,10 @@
 #include <journal.h>
 #include <attendee.h>
 
+namespace KCalCore {
+    class Person;
+}
+
 class IncidenceHandler
 {
 public:
@@ -45,6 +49,8 @@ private:
     static bool eventsEqual(const KCalCore::Event::Ptr &a, const KCalCore::Event::Ptr &b);
     static bool todosEqual(const KCalCore::Todo::Ptr &a, const KCalCore::Todo::Ptr &b);
     static bool journalsEqual(const KCalCore::Journal::Ptr &a, const KCalCore::Journal::Ptr &b);
+
+    static void normalizePersonEmail(KCalCore::Person *p);
 };
 
 #endif // INCIDENCEHANDLER_P_H
