@@ -169,14 +169,13 @@ bool IncidenceHandler::todosEqual(const KCalCore::Todo::Ptr &a, const KCalCore::
     RETURN_FALSE_IF_NOT_EQUAL(a, b, isCompleted(), "isCompleted");
     RETURN_FALSE_IF_NOT_EQUAL_CUSTOM(a->completed() != b->completed(), "completed", (a->completed().toString() + " " + b->completed().toString()));
     RETURN_FALSE_IF_NOT_EQUAL(a, b, isOpenEnded(), "isOpenEnded");
-    RETURN_FALSE_IF_NOT_EQUAL(a, b, mimeType(), "mimeType");
     RETURN_FALSE_IF_NOT_EQUAL(a, b, percentComplete(), "percentComplete");
     return true;
 }
 
 bool IncidenceHandler::journalsEqual(const KCalCore::Journal::Ptr &a, const KCalCore::Journal::Ptr &b)
 {
-    RETURN_FALSE_IF_NOT_EQUAL(a, b, mimeType(), "mimeType");
+    // no journal-specific properties; it only uses the base incidence properties
     return true;
 }
 
@@ -214,6 +213,14 @@ void IncidenceHandler::copyIncidenceProperties(KCalCore::Incidence::Ptr dest, co
         COPY_IF_NOT_EQUAL(destEvent, srcEvent, dtEnd(), setDtEnd);
         COPY_IF_NOT_EQUAL(destEvent, srcEvent, hasEndDate(), setHasEndDate);
         COPY_IF_NOT_EQUAL(destEvent, srcEvent, transparency(), setTransparency);
+    }
+
+    if (dest->type() == KCalCore::IncidenceBase::TypeTodo && src->type() == KCalCore::IncidenceBase::TypeTodo) {
+        KCalCore::Todo::Ptr destTodo = dest.staticCast<KCalCore::Todo>();
+        KCalCore::Todo::Ptr srcTodo = src.staticCast<KCalCore::Todo>();
+        COPY_IF_NOT_EQUAL(destTodo, srcTodo, completed(), setCompleted);
+        COPY_IF_NOT_EQUAL(destTodo, srcTodo, dtRecurrence(), setDtRecurrence);
+        COPY_IF_NOT_EQUAL(destTodo, srcTodo, percentComplete(), setPercentComplete);
     }
 
     // dtStart and dtEnd changes allDay value, so must set those before copying allDay value
