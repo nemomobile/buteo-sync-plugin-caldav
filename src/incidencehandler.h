@@ -50,6 +50,9 @@ private:
     static bool todosEqual(const KCalCore::Todo::Ptr &a, const KCalCore::Todo::Ptr &b);
     static bool journalsEqual(const KCalCore::Journal::Ptr &a, const KCalCore::Journal::Ptr &b);
 
+    template <typename T>
+    static bool pointerDataEqual(const QVector<QSharedPointer<T> > &vectorA, const QVector<QSharedPointer<T> > &vectorB);
+
     static void normalizePersonEmail(KCalCore::Person *p);
 };
 
