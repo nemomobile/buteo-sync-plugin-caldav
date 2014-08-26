@@ -80,7 +80,7 @@ signals:
 private slots:
     void reportRequestFinished();
     void nonReportRequestFinished();
-
+    void processETags();
 private:
     void sendReportRequest();
     void clearRequests();

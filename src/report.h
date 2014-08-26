@@ -27,8 +27,6 @@
 #include "request.h"
 #include "reader.h"
 
-#include <incidence.h>
-
 #include <QObject>
 
 class QNetworkAccessManager;
@@ -45,29 +43,23 @@ public:
                       const QDateTime &fromDateTime = QDateTime(),
                       const QDateTime &toDateTime = QDateTime());
     void getAllETags(const QString &serverPath,
-                     const QHash<QString, QString> &localIncidenceETags,
-                     const KCalCore::Incidence::List &currentLocalIncidences,
-                     const KCalCore::Incidence::List &localDeletedIncidences,
                      const QDateTime &fromDateTime = QDateTime(),
                      const QDateTime &toDateTime = QDateTime());
+    void multiGetEvents(const QString &serverPath, const QStringList &eventIdList);
 
-    QList<Reader::CalendarResource> receivedCalendarResources() const;
-    QStringList localIncidenceUidsNotOnServer() const;
+    QHash<QString, Reader::CalendarResource> receivedCalendarResources() const;
 
 private Q_SLOTS:
-    void processEvents();
-    void processETags();
+    void processResponse();
 
 private:
-    void multiGetEvents(const QString &serverPath, const QStringList &eventIdList);
-    bool initRequest(const QString &serverPath);
-
-    QHash<QString, QString> mLocalIncidenceETags;
-    QList<Reader::CalendarResource> mReceivedResources;
-    QStringList mLocalIncidenceUidsNotOnServer;
-    KCalCore::Incidence::List mLocalIncidences;
-    KCalCore::Incidence::List mLocalDeletedIncidences;
+    void sendRequest(const QString &serverPath, const QByteArray &requestData);
+    void sendCalendarQuery(const QString &serverPath,
+                           const QDateTime &fromDateTime,
+                           const QDateTime &toDateTime,
+                           bool getCalendarData);
     QString mServerPath;
+    QHash<QString, Reader::CalendarResource> mReceivedResources;
 };
 
 #endif // REPORT_H
