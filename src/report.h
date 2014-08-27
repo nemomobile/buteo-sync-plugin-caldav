@@ -54,6 +54,10 @@ private Q_SLOTS:
 
 private:
     void sendRequest(const QString &serverPath, const QByteArray &requestData);
+    void sendCalendarQuery(const QString &serverPath,
+                           const QDateTime &fromDateTime,
+                           const QDateTime &toDateTime,
+                           bool getCalendarData);
     QString mServerPath;
     QHash<QString, Reader::CalendarResource> mReceivedResources;
 };

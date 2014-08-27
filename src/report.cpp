@@ -71,23 +71,7 @@ Report::Report(QNetworkAccessManager *manager, Settings *settings, QObject *pare
 void Report::getAllEvents(const QString &serverPath, const QDateTime &fromDateTime, const QDateTime &toDateTime)
 {
     FUNCTION_CALL_TRACE;
-
-    QByteArray requestData = \
-            "<c:calendar-query xmlns:d=\"DAV:\" xmlns:c=\"urn:ietf:params:xml:ns:caldav\">" \
-                "<d:prop>" \
-                    "<d:getetag />"\
-                    "<c:calendar-data />" \
-                "</d:prop>"
-                "<c:filter>" \
-                    "<c:comp-filter name=\"VCALENDAR\">";
-    if (fromDateTime.isValid() || toDateTime.isValid()) {
-        requestData.append(timeRangeFilterXml(fromDateTime, toDateTime));
-    }
-    requestData += \
-                    "</c:comp-filter>" \
-                "</c:filter>" \
-            "</c:calendar-query>";
-    sendRequest(serverPath, requestData);
+    sendCalendarQuery(serverPath, fromDateTime, toDateTime, true);
 }
 
 void Report::getAllETags(const QString &serverPath,
@@ -95,11 +79,24 @@ void Report::getAllETags(const QString &serverPath,
                          const QDateTime &toDateTime)
 {
     FUNCTION_CALL_TRACE;
+    sendCalendarQuery(serverPath, fromDateTime, toDateTime, false);
+}
 
+void Report::sendCalendarQuery(const QString &serverPath,
+                               const QDateTime &fromDateTime,
+                               const QDateTime &toDateTime,
+                               bool getCalendarData)
+{
+    FUNCTION_CALL_TRACE;
     QByteArray requestData = \
             "<c:calendar-query xmlns:d=\"DAV:\" xmlns:c=\"urn:ietf:params:xml:ns:caldav\">" \
                 "<d:prop>" \
-                    "<d:getetag />"\
+                    "<d:getetag />";
+    if (getCalendarData) {
+        requestData += \
+                    "<c:calendar-data />";
+    }
+    requestData += \
                 "</d:prop>"
                 "<c:filter>" \
                     "<c:comp-filter name=\"VCALENDAR\">";
