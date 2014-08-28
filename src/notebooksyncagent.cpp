@@ -448,11 +448,25 @@ bool NotebookSyncAgent::discardRemoteChanges(KCalCore::Incidence::List *localIns
     }
     for (KCalCore::Incidence::List::iterator it = localDeleted->begin(); it != localDeleted->end();) {
         const QString &uid = (*it)->uid();
-        mLocalDeletedUids.insert(uid);
-        if (remoteDeletedIncidences.contains(uid) || deletions.indexOf(uid) >= 0) {
+
+        if (deletions.indexOf(uid) >= 0) {
+            // Ignore locally deleted incidences, which have been deleted during the
+            // last sync. (These could still show up as new incidences on the server
+            // if they have been moved out and in of the calender. The next if clause
+            // would delete them on the server instead of fetching them again.
+            LOG_DEBUG("Discarding deletion" << uid);
+            it = localDeleted->erase(it);
+        } else if (!mReceivedUids.contains(uid)) {
+            // If a locally deleted incidence is still on the server, it will have
+            // been received as a new incidence. Thus, all locally
+            // deleted incindences which are not under the received incidences should
+            // be ignored, as they have already been deleted from the server.
             LOG_DEBUG("Discarding deletion" << uid);
             it = localDeleted->erase(it);
         } else {
+            // Add the uid to mLocalDeletedUids so that we do not insert the incidence as
+            // new incidence later on.
+            mLocalDeletedUids.insert(uid);
             ++it;
         }
     }
@@ -515,11 +529,6 @@ void NotebookSyncAgent::processETags()
             return;
         }
 
-        KCalCore::Incidence::List deletions;
-        if (!mStorage->deletedIncidences(&deletions, KDateTime(mChangesSinceDate), mNotebook->uid())) {
-            LOG_CRITICAL("mKCal::ExtendedStorage::deletedIncidences() failed");
-        }
-
         QStringList eventIdList;
 
         Q_FOREACH (KCalCore::Incidence::Ptr incidence, storageIncidenceList) {
@@ -548,19 +557,6 @@ void NotebookSyncAgent::processETags()
                               << "tag changed from" << mLocalETags.value(incidence->uid())
                               << "to" << resource.etag);
                     eventIdList.append(resource.href);
-                }
-            }
-        }
-        // if a locally deleted incidence is not on the server (i.e. was deleted), add
-        // this to the list
-        if (deletions.count()) {
-            QSet<QString> remoteUids;
-            Q_FOREACH (const QString &href, map.keys()) {
-                remoteUids.insert(Reader::hrefToUid(href));
-            }
-            Q_FOREACH (KCalCore::Incidence::Ptr incidence, deletions) {
-                if (!remoteUids.contains(incidence->uid())) {
-                    mIncidenceUidsToDelete.append(incidence->uid());
                 }
             }
         }
