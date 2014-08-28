@@ -682,8 +682,7 @@ bool NotebookSyncAgent::updateIncidences(const QList<Reader::CalendarResource> &
             LOG_DEBUG("Ignore incidence already deleted locally:" << resource.href);
             continue;
         }
-        KCalCore::ICalFormat iCalFormat;
-        KCalCore::Incidence::Ptr newIncidence = iCalFormat.fromString(resource.iCalData);
+        const KCalCore::Incidence::Ptr &newIncidence = resource.incidence;
         if (newIncidence.isNull()) {
             continue;
         }
