@@ -395,17 +395,13 @@ bool NotebookSyncAgent::discardRemoteChanges(KCalCore::Incidence::List *localIns
         }
     }
 
-    QSet<QString> serverModifiedUids;
-    for (int i=0; i<mReceivedCalendarResources.count(); i++) {
-        serverModifiedUids.insert(Reader::hrefToUid(mReceivedCalendarResources[i].href));
-    }
     for (KCalCore::Incidence::List::iterator it = localModified->begin(); it != localModified->end();) {
         KCalCore::Incidence::Ptr sourceIncidence = *it;
         const QString &uid = sourceIncidence->uid();
-        if (remoteDeletedIncidences.contains(uid) || serverModifiedUids.contains(uid)) {
+        if (remoteDeletedIncidences.contains(uid) || mReceivedUids.contains(uid)) {
             LOG_DEBUG("Discarding modification,"
                       << (remoteDeletedIncidences.contains(uid) ? "was already deleted on server" : "")
-                      << (serverModifiedUids.contains(uid) ? "was already modified on server": ""));
+                      << (mReceivedUids.contains(uid) ? "was already modified on server": ""));
             it = localModified->erase(it);
             continue;
         } else if (modifications.contains(uid)) {
