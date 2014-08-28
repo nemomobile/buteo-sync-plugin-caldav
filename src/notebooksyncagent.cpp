@@ -286,7 +286,27 @@ void NotebookSyncAgent::sendLocalChanges()
         Delete *del = new Delete(mNAManager, mSettings);
         mRequests.insert(del);
         connect(del, SIGNAL(finished()), this, SLOT(nonReportRequestFinished()));
-        del->deleteEvent(mServerPath, deleted[i]);
+
+        // We have to determine the correct href of the deleted incidence.
+        // Unfortunately, the store backend deletes all custom properties
+        // for deleted incidences, so we cannot use
+        // customProperty("buteo", "uri").
+        // Fortunately, the delted incidence is under mReceivedCalendarResources
+        const QString &uid = deleted[i]->uid();
+        QString href;
+        Q_FOREACH(const Reader::CalendarResource &resource, mReceivedCalendarResources) {
+            if (!resource.incidence.isNull() && (uid == resource.incidence->uid())) {
+                href = resource.href;
+                break;
+            }
+        }
+
+        if (href.isNull()) {
+            emitFinished(Buteo::SyncResults::INTERNAL_ERROR,
+                         "Unable to determine href for locally deleted incidence " + uid);
+        }
+
+        del->deleteEvent(href);
     }
 }
 
