@@ -679,13 +679,12 @@ bool NotebookSyncAgent::updateIncidences(const QList<Reader::CalendarResource> &
 
     for (int i=0; i<resources.count(); i++) {
         const Reader::CalendarResource &resource = resources.at(i);
-        if (mLocalDeletedUids.contains(Reader::hrefToUid(resource.href))) {
-            LOG_DEBUG("Ignore incidence already deleted locally:" << resource.href);
+        KCalCore::Incidence::Ptr newIncidence = resources.at(i).incidence;
+        if (newIncidence.isNull()) {
             continue;
         }
-        KCalCore::ICalFormat iCalFormat;
-        KCalCore::Incidence::Ptr newIncidence = iCalFormat.fromString(resource.iCalData);
-        if (newIncidence.isNull()) {
+        if (mLocalDeletedUids.contains(newIncidence->uid())) {
+            LOG_DEBUG("Ignore incidence already deleted locally:" << resource.href);
             continue;
         }
         // find any existing incidence with this uid

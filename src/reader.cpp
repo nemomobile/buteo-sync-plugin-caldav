@@ -58,20 +58,6 @@ const QHash<QString, Reader::CalendarResource>& Reader::results() const
     return mResults;
 }
 
-QString Reader::hrefToUid(const QString &href)
-{
-    QString result = href;
-    int slash = result.lastIndexOf('/');
-    if (slash >= 0 && slash+1 < result.length()) {
-        result = result.mid(slash + 1);
-    }
-    int ext = result.lastIndexOf(".ics");
-    if (ext >= 0) {
-        result = result.mid(0, ext);
-    }
-    return result;
-}
-
 void Reader::readMultiStatus()
 {
     while (mReader->readNextStartElement()) {
