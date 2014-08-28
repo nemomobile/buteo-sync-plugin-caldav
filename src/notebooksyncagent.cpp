@@ -198,6 +198,11 @@ void NotebookSyncAgent::startQuickSync(mKCal::Notebook::Ptr notebook,
         return;
     }
 
+    mStorageUids.clear();
+    Q_FOREACH(const KCalCore::Incidence::Ptr &incidence, mStorageIncidenceList) {
+        mStorageUids.insert(incidence->uid());
+    }
+
     sendReportRequest();
 }
 
@@ -265,7 +270,7 @@ void NotebookSyncAgent::sendLocalChanges()
 
     KCalCore::Incidence::List inserted;
     KCalCore::Incidence::List modified;
-    KCalCore::Incidence::List deleted;
+    QStringList deleted;
     if (!loadLocalChanges(mChangesSinceDate, &inserted, &modified, &deleted)) {
         emitFinished(Buteo::SyncResults::INTERNAL_ERROR, "Unable to load changes for calendar: " + mServerPath);
         return;
@@ -302,7 +307,7 @@ void NotebookSyncAgent::sendLocalChanges()
         // for deleted incidences, so we cannot use
         // customProperty("buteo", "uri").
         // Fortunately, the delted incidence is under mReceivedCalendarResources
-        const QString &uid = deleted[i]->uid();
+        const QString &uid = deleted[i];
         QString href;
         Q_FOREACH(const Reader::CalendarResource &resource, mReceivedCalendarResources) {
             if (!resource.incidence.isNull() && (uid == resource.incidence->uid())) {
@@ -323,7 +328,7 @@ void NotebookSyncAgent::sendLocalChanges()
 bool NotebookSyncAgent::loadLocalChanges(const QDateTime &fromDate,
                                          KCalCore::Incidence::List *inserted,
                                          KCalCore::Incidence::List *modified,
-                                         KCalCore::Incidence::List *deleted)
+                                         QStringList *deleted)
 {
     FUNCTION_CALL_TRACE;
 
@@ -341,10 +346,16 @@ bool NotebookSyncAgent::loadLocalChanges(const QDateTime &fromDate,
         LOG_CRITICAL("mKCal::ExtendedStorage::modifiedIncidences() failed");
         return false;
     }
-    if (!mStorage->deletedIncidences(deleted, kFromDate, notebookUid)) {
+
+    KCalCore::Incidence::List deletedIncidences;
+    if (!mStorage->deletedIncidences(&deletedIncidences, kFromDate, notebookUid)) {
         LOG_CRITICAL("mKCal::ExtendedStorage::deletedIncidences() failed");
         return false;
     }
+    Q_FOREACH(const KCalCore::Incidence::Ptr &incidence, deletedIncidences) {
+        deleted->append(incidence->uid());
+    }
+
     LOG_DEBUG("Initially found changes for" << mServerPath << "since" << fromDate << ":"
               << "inserted = " << inserted->count()
               << "modified = " << modified->count()
@@ -368,7 +379,7 @@ bool NotebookSyncAgent::loadLocalChanges(const QDateTime &fromDate,
 
 bool NotebookSyncAgent::discardRemoteChanges(KCalCore::Incidence::List *localInserted,
                                              KCalCore::Incidence::List *localModified,
-                                             KCalCore::Incidence::List *localDeleted)
+                                             QStringList *localDeleted)
 {
     NOTEBOOK_FUNCTION_CALL_TRACE;
 
@@ -392,6 +403,7 @@ bool NotebookSyncAgent::discardRemoteChanges(KCalCore::Incidence::List *localIns
         LOG_CRITICAL("Unable to look up last sync additions for notebook:" << mNotebook->uid());
         return false;
     }
+
     QHash<QString,QString> modifications = mDatabase->modifications(mNotebook->uid(), &ok);
     if (!ok) {
         LOG_CRITICAL("Unable to look up last sync modifications for notebook:" << mNotebook->uid());
@@ -467,13 +479,26 @@ bool NotebookSyncAgent::discardRemoteChanges(KCalCore::Incidence::List *localIns
         ++it;
     }
 
+
+    // Incidences which have been received during the last sync and then were deleted locally
+    // will not show up in localDeleted as their creation time is after the start time of
+    // the last sync. Therefore, go through the list of additions and add all of them which
+    // are missing in the storage to the localDeleted list.
+    Q_FOREACH(const QString& uid, additions) {
+        if (!mStorageUids.contains(uid) && !localDeleted->contains(uid)) {
+            LOG_DEBUG("Adding previous addition " << uid
+                      << " to local deletions as it has vanished from local storage");
+            localDeleted->append(uid);
+        }
+    }
+
     QStringList deletions = mDatabase->deletions(mNotebook->uid(), &ok);
     if (!ok) {
         LOG_CRITICAL("Unable to look up last sync deletions for notebook:" << mNotebook->uid());
         return false;
     }
-    for (KCalCore::Incidence::List::iterator it = localDeleted->begin(); it != localDeleted->end();) {
-        const QString &uid = (*it)->uid();
+    for (QStringList::iterator it = localDeleted->begin(); it != localDeleted->end();) {
+        const QString &uid = *it;
 
         if (deletions.indexOf(uid) >= 0) {
             // Ignore locally deleted incidences, which have been deleted during the
@@ -500,17 +525,16 @@ bool NotebookSyncAgent::discardRemoteChanges(KCalCore::Incidence::List *localIns
     return true;
 }
 
-int NotebookSyncAgent::removeCommonIncidences(KCalCore::Incidence::List *firstList, KCalCore::Incidence::List *secondList)
+int NotebookSyncAgent::removeCommonIncidences(KCalCore::Incidence::List *firstList, QStringList *secondList)
 {
     QSet<QString> firstListUids;
     for (int i=0; i<firstList->count(); i++) {
         firstListUids.insert(firstList->at(i)->uid());
     }
     QSet<QString> commonUids;
-    for (KCalCore::Incidence::List::iterator it = secondList->begin(); it != secondList->end();) {
-        const KCalCore::Incidence::Ptr &incidence = *it;
-        if (firstListUids.contains(incidence->uid())) {
-            commonUids.insert(incidence->uid());
+    for (QStringList::iterator it = secondList->begin(); it != secondList->end();) {
+        if (firstListUids.contains(*it)) {
+            commonUids.insert(*it);
             it = secondList->erase(it);
         } else {
             ++it;

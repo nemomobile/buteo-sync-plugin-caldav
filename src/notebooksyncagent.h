@@ -94,15 +94,16 @@ private:
     bool loadLocalChanges(const QDateTime &fromDate,
                           KCalCore::Incidence::List *inserted,
                           KCalCore::Incidence::List *modified,
-                          KCalCore::Incidence::List *deleted);
+                          QStringList *deleted);
     bool discardRemoteChanges(KCalCore::Incidence::List *localInserted,
                               KCalCore::Incidence::List *localModified,
-                              KCalCore::Incidence::List *localDeleted);
+                              QStringList *localDeleted);
     int removeCommonIncidences(KCalCore::Incidence::List *inserted,
-                               KCalCore::Incidence::List *deleted);
+                               QStringList *deleted);
 
     KCalCore::Incidence::List mCalendarIncidencesBeforeSync;
     KCalCore::Incidence::List mStorageIncidenceList;
+    QSet<QString> mStorageUids;
     QSet<QString> mLocalDeletedUids;
     QList<Reader::CalendarResource> mReceivedCalendarResources;
     QSet<QString> mReceivedUids;
