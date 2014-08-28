@@ -188,6 +188,16 @@ void NotebookSyncAgent::startQuickSync(mKCal::Notebook::Ptr notebook,
         return;
     }
 
+    // Incidences must be loaded with ExtendedStorage::allIncidences() rather than
+    // ExtendedCalendar::incidences(), because the latter will load incidences from all
+    // notebooks, rather than just the one for this report.
+    // Note that storage incidence references cannot be used with ExtendedCalendar::deleteEvent()
+    // etc. Those methods only work for references created by ExtendedCalendar.
+    if (!mStorage->allIncidences(&mStorageIncidenceList, mNotebook->uid())) {
+        emitFinished(Buteo::SyncResults::DATABASE_FAILURE, QString("Unable to load storage incidences for notebook: %1").arg(mNotebook->uid()));
+        return;
+    }
+
     sendReportRequest();
 }
 
@@ -534,20 +544,9 @@ void NotebookSyncAgent::processETags()
         LOG_DEBUG("Process tags for server path" << mServerPath);
         QHash<QString, Reader::CalendarResource> map = report->receivedCalendarResources();
 
-        // Incidences must be loaded with ExtendedStorage::allIncidences() rather than
-        // ExtendedCalendar::incidences(), because the latter will load incidences from all
-        // notebooks, rather than just the one for this report.
-        // Note that storage incidence references cannot be used with ExtendedCalendar::deleteEvent()
-        // etc. Those methods only work for references created by ExtendedCalendar.
-        KCalCore::Incidence::List storageIncidenceList;
-        if (!mStorage->allIncidences(&storageIncidenceList, mNotebook->uid())) {
-            emitFinished(Buteo::SyncResults::DATABASE_FAILURE, QString("Unable to load storage incidences for notebook: %1").arg(mNotebook->uid()));
-            return;
-        }
-
         QStringList eventIdList;
 
-        Q_FOREACH (KCalCore::Incidence::Ptr incidence, storageIncidenceList) {
+        Q_FOREACH (KCalCore::Incidence::Ptr incidence, mStorageIncidenceList) {
             QString uri = incidence->customProperty("buteo", "uri");
             if (uri.isEmpty()) {
                 //Newly added to Local DB -- Skip this incidence
