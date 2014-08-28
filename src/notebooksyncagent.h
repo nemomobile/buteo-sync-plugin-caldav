@@ -104,6 +104,7 @@ private:
     KCalCore::Incidence::List mCalendarIncidencesBeforeSync;
     QSet<QString> mLocalDeletedUids;
     QList<Reader::CalendarResource> mReceivedCalendarResources;
+    QSet<QString> mReceivedUids;
     QStringList mNewRemoteIncidenceIds;
     QHash<QString,QString> mModifiedIncidenceICalData;
     QHash<QString,QString> mLocalETags;

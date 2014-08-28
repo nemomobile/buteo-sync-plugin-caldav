@@ -601,6 +601,14 @@ void NotebookSyncAgent::reportRequestFinished()
 
     if (report->errorCode() == Buteo::SyncResults::NO_ERROR) {
         mReceivedCalendarResources = report->receivedCalendarResources().values();
+
+        mReceivedUids.clear();
+        Q_FOREACH (const Reader::CalendarResource & resource, mReceivedCalendarResources) {
+            if (!resource.incidence.isNull()) {
+                mReceivedUids.insert(resource.incidence->uid());
+            }
+        }
+
         LOG_DEBUG("Received" << mReceivedCalendarResources.count() << "calendar resources");
         if (mSyncMode == QuickSync) {
             sendLocalChanges();
