@@ -286,10 +286,30 @@ void NotebookSyncAgent::sendLocalChanges()
               << "deleted = " << deleted.count());
 
     for (int i=0; i<inserted.count(); i++) {
+        KCalCore::Incidence::Ptr &incidence = inserted[i];
         Put *put = new Put(mNAManager, mSettings);
         mRequests.insert(put);
         connect(put, SIGNAL(finished()), this, SLOT(nonReportRequestFinished()));
-        put->createEvent(mServerPath, inserted[i]);
+        put->createEvent(mServerPath, incidence);
+
+        // Save the href we pushed the incidence to. If we set custom properties
+        // on the stored incidence, this will change its modification time.
+        // (We cannot reset the modification time as it will automatically be
+        // set by the storage backend if the incidence is saved to the database.
+        // (See SqliteStorage::Private::saveIncidences.)
+        // Thus, instead add the incidence to mReceivedCalendarResources, which
+        // will write the changes and add the incidence to the sync modifications
+        // database.
+
+        LOG_DEBUG("Adding URI to existing incidence:" << incidence->uid());
+        QString href = mServerPath + incidence->uid() + ".ics";
+        incidence->setCustomProperty("buteo", "uri", href);
+        Reader::CalendarResource resource;
+        resource.href = href;
+        resource.incidence = incidence;
+        KCalCore::ICalFormat icalFormat;
+        resource.iCalData = icalFormat.toICalString(IncidenceHandler::incidenceToExport(incidence));
+        mReceivedCalendarResources.append(resource);
     }
     for (int i=0; i<modified.count(); i++) {
         Put *put = new Put(mNAManager, mSettings);
