@@ -79,6 +79,7 @@ signals:
 
 private slots:
     void reportRequestFinished();
+    void additionalReportRequestFinished();
     void nonReportRequestFinished();
     void processETags();
 private:
@@ -91,6 +92,7 @@ private:
     bool deleteIncidences(const QStringList &incidenceUids);
 
     void sendLocalChanges();
+    void finalizeSendingLocalChanges();
     bool loadLocalChanges(const QDateTime &fromDate,
                           KCalCore::Incidence::List *inserted,
                           KCalCore::Incidence::List *modified,
@@ -103,6 +105,8 @@ private:
 
     KCalCore::Incidence::List mCalendarIncidencesBeforeSync;
     KCalCore::Incidence::List mStorageIncidenceList;
+    KCalCore::Incidence::List mLocallyInsertedIncidences;
+    KCalCore::Incidence::List mLocallyModifiedIncidences;
     QSet<QString> mStorageUids;
     QSet<QString> mLocalDeletedUids;
     QList<Reader::CalendarResource> mReceivedCalendarResources;
