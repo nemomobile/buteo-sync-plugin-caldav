@@ -27,6 +27,8 @@
 #include <QUrl>
 #include <QXmlStreamReader>
 
+#include <icalformat.h>
+
 #include <LogMacros.h>
 
 Reader::Reader(QObject *parent)
@@ -56,20 +58,6 @@ const QHash<QString, Reader::CalendarResource>& Reader::results() const
     return mResults;
 }
 
-QString Reader::hrefToUid(const QString &href)
-{
-    QString result = href;
-    int slash = result.lastIndexOf('/');
-    if (slash >= 0 && slash+1 < result.length()) {
-        result = result.mid(slash + 1);
-    }
-    int ext = result.lastIndexOf(".ics");
-    if (ext >= 0) {
-        result = result.mid(0, ext);
-    }
-    return result;
-}
-
 void Reader::readMultiStatus()
 {
     while (mReader->readNextStartElement()) {
@@ -92,6 +80,10 @@ void Reader::readResponse()
     if (resource.href.isEmpty()) {
         LOG_WARNING("Ignoring received calendar object data, is missing href value");
         return;
+    }
+    if (!resource.iCalData.isEmpty()) {
+        KCalCore::ICalFormat iCalFormat;
+        resource.incidence = iCalFormat.fromString(resource.iCalData);
     }
     LOG_DEBUG(QUrl::fromPercentEncoding(resource.href.toLatin1()));
     mResults.insert(QUrl::fromPercentEncoding(resource.href.toLatin1()), resource);

@@ -27,6 +27,8 @@
 #include <QObject>
 #include <QHash>
 
+#include <incidence.h>
+
 class QXmlStreamReader;
 
 class Reader : public QObject
@@ -38,6 +40,7 @@ public:
         QString etag;
         QString status;
         QString iCalData;
+        KCalCore::Incidence::Ptr incidence;
     };
 
     explicit Reader(QObject *parent = 0);
@@ -45,8 +48,6 @@ public:
 
     void read(const QByteArray &data);
     const QHash<QString, CalendarResource>& results() const;
-
-    static QString hrefToUid(const QString &href);
 
 private:
     void readMultiStatus();

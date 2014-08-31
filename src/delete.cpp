@@ -37,18 +37,12 @@ Delete::Delete(QNetworkAccessManager *manager, Settings *settings, QObject *pare
     FUNCTION_CALL_TRACE;
 }
 
-void Delete::deleteEvent(const QString &serverPath, KCalCore::Incidence::Ptr incidence)
+void Delete::deleteEvent(const QString &href)
 {
     FUNCTION_CALL_TRACE;
 
-    QString uri = resourceUriForIncidence(incidence);
-    if (uri.isEmpty()) {
-        finishedWithError(Buteo::SyncResults::INTERNAL_ERROR,
-                          QString("DELETE not sent, cannot get uri for incidence %1").arg(incidence->uid()));
-        return;
-    }
     QNetworkRequest request;
-    prepareRequest(&request, serverPath + uri);
+    prepareRequest(&request, href);
     QNetworkReply *reply = mNAManager->sendCustomRequest(request, REQUEST_TYPE.toLatin1());
     debugRequest(request, QStringLiteral(""));
     connect(reply, SIGNAL(finished()), this, SLOT(requestFinished()));
@@ -74,17 +68,4 @@ void Delete::requestFinished()
 
     finishedWithReplyResult(reply->error());
     reply->deleteLater();
-}
-
-QString Delete::resourceUriForIncidence(KCalCore::Incidence::Ptr incidence)
-{
-    QString uri = incidence->customProperty("buteo", "uri");
-    if (!uri.isEmpty()) {
-        return uri.split("/", QString::SkipEmptyParts).last();
-    }
-    QString path = incidence->uid();
-    if (!path.isEmpty()) {
-        path += VCalExtension;
-    }
-    return path;
 }

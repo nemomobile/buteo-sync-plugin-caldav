@@ -42,13 +42,11 @@ class Delete : public Request
 public:
     explicit Delete(QNetworkAccessManager *manager, Settings *settings, QObject *parent = 0);
 
-    void deleteEvent(const QString &serverPath, KCalCore::Incidence::Ptr incidence);
+    void deleteEvent(const QString &href);
 
 private Q_SLOTS:
     void requestFinished();
 
-private:
-    QString resourceUriForIncidence(KCalCore::Incidence::Ptr incidence);
 };
 
 #endif // DELETE_H

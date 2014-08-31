@@ -4,6 +4,7 @@
  * Copyright (C) 2013 Jolla Ltd. and/or its subsidiary(-ies).
  *
  * Contributors: Mani Chandrasekar <maninc@gmail.com>
+ *               Stephan Rave <mail@stephanrave.de>
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public License
@@ -29,8 +30,6 @@
 #include <QBuffer>
 #include <QDebug>
 #include <QStringList>
-
-#include <incidence.h>
 
 #include <LogMacros.h>
 
@@ -72,61 +71,32 @@ Report::Report(QNetworkAccessManager *manager, Settings *settings, QObject *pare
 void Report::getAllEvents(const QString &serverPath, const QDateTime &fromDateTime, const QDateTime &toDateTime)
 {
     FUNCTION_CALL_TRACE;
-    mServerPath = serverPath;
-
-    QNetworkRequest request;
-    prepareRequest(&request, serverPath);
-    request.setRawHeader("Depth", "1");
-    request.setRawHeader("Prefer", "return-minimal");
-    request.setHeader(QNetworkRequest::ContentTypeHeader, "application/xml; charset=utf-8");
-
-    QByteArray requestData = \
-            "<c:calendar-query xmlns:d=\"DAV:\" xmlns:c=\"urn:ietf:params:xml:ns:caldav\">" \
-                "<d:prop>" \
-                    "<d:getetag />"\
-                    "<c:calendar-data />" \
-                "</d:prop>"
-                "<c:filter>" \
-                    "<c:comp-filter name=\"VCALENDAR\">";
-    if (fromDateTime.isValid() || toDateTime.isValid()) {
-        requestData.append(timeRangeFilterXml(fromDateTime, toDateTime));
-    }
-    requestData += \
-                    "</c:comp-filter>" \
-                "</c:filter>" \
-            "</c:calendar-query>";
-    QBuffer *buffer = new QBuffer(this);
-    buffer->setData(requestData);
-    QNetworkReply *reply = mNAManager->sendCustomRequest(request, REQUEST_TYPE.toLatin1(), buffer);
-    debugRequest(request, buffer->buffer());
-    connect(reply, SIGNAL(finished()), this, SLOT(processEvents()));
-    connect(reply, SIGNAL(sslErrors(QList<QSslError>)),
-            this, SLOT(slotSslErrors(QList<QSslError>)));
+    sendCalendarQuery(serverPath, fromDateTime, toDateTime, true);
 }
 
 void Report::getAllETags(const QString &serverPath,
-                         const QHash<QString, QString> &localIncidenceETags,
-                         const KCalCore::Incidence::List &currentLocalIncidences,
-                         const KCalCore::Incidence::List &localDeletedIncidences,
                          const QDateTime &fromDateTime,
                          const QDateTime &toDateTime)
 {
     FUNCTION_CALL_TRACE;
-    mServerPath = serverPath;
-    mLocalIncidenceETags = localIncidenceETags;
-    mLocalIncidences = currentLocalIncidences;
-    mLocalDeletedIncidences = localDeletedIncidences;
+    sendCalendarQuery(serverPath, fromDateTime, toDateTime, false);
+}
 
-    QNetworkRequest request;
-    prepareRequest(&request, serverPath);
-    request.setRawHeader("Depth", "1");
-    request.setRawHeader("Prefer", "return-minimal");
-    request.setHeader(QNetworkRequest::ContentTypeHeader, "application/xml; charset=utf-8");
-
+void Report::sendCalendarQuery(const QString &serverPath,
+                               const QDateTime &fromDateTime,
+                               const QDateTime &toDateTime,
+                               bool getCalendarData)
+{
+    FUNCTION_CALL_TRACE;
     QByteArray requestData = \
             "<c:calendar-query xmlns:d=\"DAV:\" xmlns:c=\"urn:ietf:params:xml:ns:caldav\">" \
                 "<d:prop>" \
-                    "<d:getetag />"\
+                    "<d:getetag />";
+    if (getCalendarData) {
+        requestData += \
+                    "<c:calendar-data />";
+    }
+    requestData += \
                 "</d:prop>"
                 "<c:filter>" \
                     "<c:comp-filter name=\"VCALENDAR\">";
@@ -137,14 +107,7 @@ void Report::getAllETags(const QString &serverPath,
                     "</c:comp-filter>" \
                 "</c:filter>" \
             "</c:calendar-query>";
-    QBuffer *buffer = new QBuffer(this);
-    buffer->setData(requestData);
-    QNetworkReply *reply = mNAManager->sendCustomRequest(request, REQUEST_TYPE.toLatin1(), buffer);
-    debugRequest(request, buffer->buffer());
-
-    connect(reply, SIGNAL(finished()), this, SLOT(processETags()));
-    connect(reply, SIGNAL(sslErrors(QList<QSslError>)),
-            this, SLOT(slotSslErrors(QList<QSslError>)));
+    sendRequest(serverPath, requestData);
 }
 
 void Report::multiGetEvents(const QString &serverPath, const QStringList &eventIdList)
@@ -154,63 +117,43 @@ void Report::multiGetEvents(const QString &serverPath, const QStringList &eventI
     if (eventIdList.isEmpty()) {
         return;
     }
+
+    QByteArray requestData = "<c:calendar-multiget xmlns:d=\"DAV:\" xmlns:c=\"urn:ietf:params:xml:ns:caldav\">" \
+                             "<d:prop><d:getetag /><c:calendar-data /></d:prop>";
+    Q_FOREACH (const QString &eventId , eventIdList) {
+        requestData.append("<d:href>");
+        requestData.append(eventId);
+        requestData.append("</d:href>");
+    }
+    requestData.append("</c:calendar-multiget>");
+
+    sendRequest(serverPath, requestData);
+ }
+
+void Report::sendRequest(const QString& serverPath, const QByteArray &requestData)
+{
+    FUNCTION_CALL_TRACE;
+    mServerPath = serverPath;
+
     QNetworkRequest request;
     prepareRequest(&request, serverPath);
     request.setRawHeader("Depth", "1");
     request.setRawHeader("Prefer", "return-minimal");
     request.setHeader(QNetworkRequest::ContentTypeHeader, "application/xml; charset=utf-8");
-
-    QString multiGetRequest = "<c:calendar-multiget xmlns:d=\"DAV:\" xmlns:c=\"urn:ietf:params:xml:ns:caldav\">" \
-                              "<d:prop><d:getetag /><c:calendar-data /></d:prop>";
-    Q_FOREACH (const QString &eventId , eventIdList) {
-        multiGetRequest.append("<d:href>");
-        multiGetRequest.append(eventId);
-        multiGetRequest.append("</d:href>");
-    }
-    multiGetRequest.append("</c:calendar-multiget>");
-
     QBuffer *buffer = new QBuffer(this);
-    buffer->setData(multiGetRequest.toLatin1());
+    buffer->setData(requestData);
     QNetworkReply *reply = mNAManager->sendCustomRequest(request, REQUEST_TYPE.toLatin1(), buffer);
-    connect(reply, SIGNAL(finished()), this, SLOT(processEvents()));
+    debugRequest(request, buffer->buffer());
+    connect(reply, SIGNAL(finished()), this, SLOT(processResponse()));
     connect(reply, SIGNAL(sslErrors(QList<QSslError>)),
             this, SLOT(slotSslErrors(QList<QSslError>)));
 }
 
-void Report::processEvents()
+void Report::processResponse()
 {
     FUNCTION_CALL_TRACE;
 
-    if (wasDeleted()) {
-        LOG_DEBUG(command() << "request was aborted");
-        return;
-    }
-    QNetworkReply *reply = qobject_cast<QNetworkReply*>(sender());
-    if (!reply) {
-        finishedWithInternalError();
-        return;
-    }
-    if (reply->error() != QNetworkReply::NoError) {
-        finishedWithReplyResult(reply->error());
-        return;
-    }
-    QByteArray data = reply->readAll();
-    debugReply(*reply, data);
-    reply->deleteLater();
-
-    if (!data.isNull() && !data.isEmpty()) {
-        Reader reader;
-        reader.read(data);
-        mReceivedResources = reader.results().values();
-    }
-    finishedWithSuccess();
-}
-
-void Report::processETags()
-{
-    FUNCTION_CALL_TRACE;
-
-    LOG_DEBUG("Process tags for server path" << mServerPath);
+    LOG_DEBUG("Process " << command() << " response for server path" << mServerPath);
 
     if (wasDeleted()) {
         LOG_DEBUG(command() << "request was aborted");
@@ -241,73 +184,17 @@ void Report::processETags()
     debugReply(*reply, data);
     reply->deleteLater();
 
-    if (!data.isEmpty()) {
+    if (!data.isNull() && !data.isEmpty()) {
         Reader reader;
         reader.read(data);
-        QHash<QString, Reader::CalendarResource> map = reader.results();
-        QStringList eventIdList;
-
-        Q_FOREACH (KCalCore::Incidence::Ptr incidence, mLocalIncidences) {
-            QString uri = incidence->customProperty("buteo", "uri");
-            if (uri.isEmpty()) {
-                //Newly added to Local DB -- Skip this incidence
-                continue;
-            }
-            if (!map.contains(uri)) {
-                // we have an incidence that's not on the remote server, so delete it
-                switch (incidence->type()) {
-                case KCalCore::IncidenceBase::TypeEvent:
-                case KCalCore::IncidenceBase::TypeTodo:
-                case KCalCore::IncidenceBase::TypeJournal:
-                    mLocalIncidenceUidsNotOnServer.append(incidence->uid());
-                    break;
-                case KCalCore::IncidenceBase::TypeFreeBusy:
-                case KCalCore::IncidenceBase::TypeUnknown:
-                    break;
-                }
-                continue;
-            } else {
-                Reader::CalendarResource resource = map.take(uri);
-                if (mLocalIncidenceETags.value(incidence->uid()) != resource.etag) {
-                    LOG_DEBUG("Will fetch update for" << resource.href
-                              << "tag changed from" << mLocalIncidenceETags.value(incidence->uid())
-                              << "to" << resource.etag);
-                    eventIdList.append(resource.href);
-                }
-            }
-        }
-        // if a locally deleted incidence is not on the server (i.e. was deleted), add
-        // this to the list
-        if (mLocalDeletedIncidences.count()) {
-            QSet<QString> remoteUids;
-            Q_FOREACH (const QString &href, map.keys()) {
-                remoteUids.insert(Reader::hrefToUid(href));
-            }
-            Q_FOREACH (KCalCore::Incidence::Ptr incidence, mLocalDeletedIncidences) {
-                if (!remoteUids.contains(incidence->uid())) {
-                    mLocalIncidenceUidsNotOnServer.append(incidence->uid());
-                }
-            }
-        }
-        LOG_DEBUG("Fetching new incidences:" << map.keys());
-        eventIdList.append(map.keys());
-        if (!eventIdList.isEmpty()) {
-            // some incidences have changed on the server, so fetch the new details
-            multiGetEvents(mServerPath, eventIdList);
-        } else {
-            finishedWithSuccess();
-        }
+        mReceivedResources = reader.results();
+        finishedWithSuccess();
     } else {
-        finishedWithError(Buteo::SyncResults::INTERNAL_ERROR, QString("Empty response body for REPORT"));
+        finishedWithError(Buteo::SyncResults::INTERNAL_ERROR, QString("Empty response body for ") + command());
     }
 }
 
-QList<Reader::CalendarResource> Report::receivedCalendarResources() const
+QHash<QString, Reader::CalendarResource> Report::receivedCalendarResources() const
 {
     return mReceivedResources;
-}
-
-QStringList Report::localIncidenceUidsNotOnServer() const
-{
-    return mLocalIncidenceUidsNotOnServer;
 }

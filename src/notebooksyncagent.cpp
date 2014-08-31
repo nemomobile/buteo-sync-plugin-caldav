@@ -4,6 +4,7 @@
  * Copyright (C) 2014 Jolla Ltd. and/or its subsidiary(-ies).
  *
  * Contributors: Bea Lam <bea.lam@jollamobile.com>
+ *               Stephan Rave <mail@stephanrave.de>
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public License
@@ -187,6 +188,21 @@ void NotebookSyncAgent::startQuickSync(mKCal::Notebook::Ptr notebook,
         return;
     }
 
+    // Incidences must be loaded with ExtendedStorage::allIncidences() rather than
+    // ExtendedCalendar::incidences(), because the latter will load incidences from all
+    // notebooks, rather than just the one for this report.
+    // Note that storage incidence references cannot be used with ExtendedCalendar::deleteEvent()
+    // etc. Those methods only work for references created by ExtendedCalendar.
+    if (!mStorage->allIncidences(&mStorageIncidenceList, mNotebook->uid())) {
+        emitFinished(Buteo::SyncResults::DATABASE_FAILURE, QString("Unable to load storage incidences for notebook: %1").arg(mNotebook->uid()));
+        return;
+    }
+
+    mStorageUids.clear();
+    Q_FOREACH(const KCalCore::Incidence::Ptr &incidence, mStorageIncidenceList) {
+        mStorageUids.insert(incidence->uid());
+    }
+
     sendReportRequest();
 }
 
@@ -242,73 +258,76 @@ void NotebookSyncAgent::fetchRemoteChanges()
 {
     NOTEBOOK_FUNCTION_CALL_TRACE;
 
-    // Incidences must be loaded with ExtendedStorage::allIncidences() rather than
-    // ExtendedCalendar::incidences(), because the latter will load incidences from all
-    // notebooks, rather than just the one for this report.
-    // Note that storage incidence references cannot be used with ExtendedCalendar::deleteEvent()
-    // etc. Those methods only work for references created by ExtendedCalendar.
-    KCalCore::Incidence::List storageIncidenceList;
-    if (!mStorage->allIncidences(&storageIncidenceList, mNotebook->uid())) {
-        emitFinished(Buteo::SyncResults::DATABASE_FAILURE, QString("Unable to load storage incidences for notebook: %1").arg(mNotebook->uid()));
-        return;
-    }
-
     Report *report = new Report(mNAManager, mSettings);
     mRequests.insert(report);
-    connect(report, SIGNAL(finished()), this, SLOT(reportRequestFinished()));
-
-    KCalCore::Incidence::List deletions;
-    if (!mStorage->deletedIncidences(&deletions, KDateTime(mChangesSinceDate), mNotebook->uid())) {
-        LOG_CRITICAL("mKCal::ExtendedStorage::deletedIncidences() failed");
-    }
-    report->getAllETags(mServerPath, mLocalETags, storageIncidenceList, deletions);
+    connect(report, SIGNAL(finished()), this, SLOT(processETags()));
+    report->getAllETags(mServerPath);
 }
 
 void NotebookSyncAgent::sendLocalChanges()
 {
     NOTEBOOK_FUNCTION_CALL_TRACE;
 
-    KCalCore::Incidence::List inserted;
-    KCalCore::Incidence::List modified;
-    KCalCore::Incidence::List deleted;
-    if (!loadLocalChanges(mChangesSinceDate, &inserted, &modified, &deleted)) {
+    QStringList deleted;
+    if (!loadLocalChanges(mChangesSinceDate, &mLocallyInsertedIncidences, &mLocallyModifiedIncidences, &deleted)) {
         emitFinished(Buteo::SyncResults::INTERNAL_ERROR, "Unable to load changes for calendar: " + mServerPath);
         return;
     }
-    if (inserted.isEmpty() && modified.isEmpty() && deleted.isEmpty()) {
+    if (mLocallyInsertedIncidences.isEmpty() && mLocallyModifiedIncidences.isEmpty() && deleted.isEmpty()) {
         LOG_DEBUG("No changes to send!");
         emitFinished(Buteo::SyncResults::NO_ERROR, "Done, no local changes for " + mServerPath);
         return;
     }
     LOG_DEBUG("Total changes for" << mServerPath << ":"
-              << "inserted = " << inserted.count()
-              << "modified = " << modified.count()
+              << "inserted = " << mLocallyInsertedIncidences.count()
+              << "modified = " << mLocallyModifiedIncidences.count()
               << "deleted = " << deleted.count());
 
-    for (int i=0; i<inserted.count(); i++) {
+    for (int i=0; i<mLocallyInsertedIncidences.count(); i++) {
+        KCalCore::Incidence::Ptr &incidence = mLocallyInsertedIncidences[i];
         Put *put = new Put(mNAManager, mSettings);
         mRequests.insert(put);
         connect(put, SIGNAL(finished()), this, SLOT(nonReportRequestFinished()));
-        put->createEvent(mServerPath, inserted[i]);
+        put->createEvent(mServerPath, incidence);
     }
-    for (int i=0; i<modified.count(); i++) {
+    for (int i=0; i<mLocallyModifiedIncidences.count(); i++) {
         Put *put = new Put(mNAManager, mSettings);
         mRequests.insert(put);
         connect(put, SIGNAL(finished()), this, SLOT(nonReportRequestFinished()));
-        put->updateEvent(mServerPath, modified[i], mLocalETags.value(modified[i]->uid()));
+        put->updateEvent(mServerPath, mLocallyModifiedIncidences[i], mLocalETags.value(mLocallyModifiedIncidences[i]->uid()));
     }
     for (int i=0; i<deleted.count(); i++) {
         Delete *del = new Delete(mNAManager, mSettings);
         mRequests.insert(del);
         connect(del, SIGNAL(finished()), this, SLOT(nonReportRequestFinished()));
-        del->deleteEvent(mServerPath, deleted[i]);
+
+        // We have to determine the correct href of the deleted incidence.
+        // Unfortunately, the store backend deletes all custom properties
+        // for deleted incidences, so we cannot use
+        // customProperty("buteo", "uri").
+        // Fortunately, the delted incidence is under mReceivedCalendarResources
+        const QString &uid = deleted[i];
+        QString href;
+        Q_FOREACH(const Reader::CalendarResource &resource, mReceivedCalendarResources) {
+            if (!resource.incidence.isNull() && (uid == resource.incidence->uid())) {
+                href = resource.href;
+                break;
+            }
+        }
+
+        if (href.isNull()) {
+            emitFinished(Buteo::SyncResults::INTERNAL_ERROR,
+                         "Unable to determine href for locally deleted incidence " + uid);
+        }
+
+        del->deleteEvent(href);
     }
 }
 
 bool NotebookSyncAgent::loadLocalChanges(const QDateTime &fromDate,
                                          KCalCore::Incidence::List *inserted,
                                          KCalCore::Incidence::List *modified,
-                                         KCalCore::Incidence::List *deleted)
+                                         QStringList *deleted)
 {
     FUNCTION_CALL_TRACE;
 
@@ -326,10 +345,16 @@ bool NotebookSyncAgent::loadLocalChanges(const QDateTime &fromDate,
         LOG_CRITICAL("mKCal::ExtendedStorage::modifiedIncidences() failed");
         return false;
     }
-    if (!mStorage->deletedIncidences(deleted, kFromDate, notebookUid)) {
+
+    KCalCore::Incidence::List deletedIncidences;
+    if (!mStorage->deletedIncidences(&deletedIncidences, kFromDate, notebookUid)) {
         LOG_CRITICAL("mKCal::ExtendedStorage::deletedIncidences() failed");
         return false;
     }
+    Q_FOREACH(const KCalCore::Incidence::Ptr &incidence, deletedIncidences) {
+        deleted->append(incidence->uid());
+    }
+
     LOG_DEBUG("Initially found changes for" << mServerPath << "since" << fromDate << ":"
               << "inserted = " << inserted->count()
               << "modified = " << modified->count()
@@ -353,7 +378,7 @@ bool NotebookSyncAgent::loadLocalChanges(const QDateTime &fromDate,
 
 bool NotebookSyncAgent::discardRemoteChanges(KCalCore::Incidence::List *localInserted,
                                              KCalCore::Incidence::List *localModified,
-                                             KCalCore::Incidence::List *localDeleted)
+                                             QStringList *localDeleted)
 {
     NOTEBOOK_FUNCTION_CALL_TRACE;
 
@@ -377,6 +402,7 @@ bool NotebookSyncAgent::discardRemoteChanges(KCalCore::Incidence::List *localIns
         LOG_CRITICAL("Unable to look up last sync additions for notebook:" << mNotebook->uid());
         return false;
     }
+
     QHash<QString,QString> modifications = mDatabase->modifications(mNotebook->uid(), &ok);
     if (!ok) {
         LOG_CRITICAL("Unable to look up last sync modifications for notebook:" << mNotebook->uid());
@@ -410,17 +436,13 @@ bool NotebookSyncAgent::discardRemoteChanges(KCalCore::Incidence::List *localIns
         }
     }
 
-    QSet<QString> serverModifiedUids;
-    for (int i=0; i<mReceivedCalendarResources.count(); i++) {
-        serverModifiedUids.insert(Reader::hrefToUid(mReceivedCalendarResources[i].href));
-    }
     for (KCalCore::Incidence::List::iterator it = localModified->begin(); it != localModified->end();) {
         KCalCore::Incidence::Ptr sourceIncidence = *it;
         const QString &uid = sourceIncidence->uid();
-        if (remoteDeletedIncidences.contains(uid) || serverModifiedUids.contains(uid)) {
+        if (remoteDeletedIncidences.contains(uid) || mReceivedUids.contains(uid)) {
             LOG_DEBUG("Discarding modification,"
                       << (remoteDeletedIncidences.contains(uid) ? "was already deleted on server" : "")
-                      << (serverModifiedUids.contains(uid) ? "was already modified on server": ""));
+                      << (mReceivedUids.contains(uid) ? "was already modified on server": ""));
             it = localModified->erase(it);
             continue;
         } else if (modifications.contains(uid)) {
@@ -456,18 +478,45 @@ bool NotebookSyncAgent::discardRemoteChanges(KCalCore::Incidence::List *localIns
         ++it;
     }
 
+
+    // Incidences which have been received during the last sync and then were deleted locally
+    // will not show up in localDeleted as their creation time is after the start time of
+    // the last sync. Therefore, go through the list of additions and add all of them which
+    // are missing in the storage to the localDeleted list.
+    Q_FOREACH(const QString& uid, additions) {
+        if (!mStorageUids.contains(uid) && !localDeleted->contains(uid)) {
+            LOG_DEBUG("Adding previous addition " << uid
+                      << " to local deletions as it has vanished from local storage");
+            localDeleted->append(uid);
+        }
+    }
+
     QStringList deletions = mDatabase->deletions(mNotebook->uid(), &ok);
     if (!ok) {
         LOG_CRITICAL("Unable to look up last sync deletions for notebook:" << mNotebook->uid());
         return false;
     }
-    for (KCalCore::Incidence::List::iterator it = localDeleted->begin(); it != localDeleted->end();) {
-        const QString &uid = (*it)->uid();
-        mLocalDeletedUids.insert(uid);
-        if (remoteDeletedIncidences.contains(uid) || deletions.indexOf(uid) >= 0) {
+    for (QStringList::iterator it = localDeleted->begin(); it != localDeleted->end();) {
+        const QString &uid = *it;
+
+        if (deletions.indexOf(uid) >= 0) {
+            // Ignore locally deleted incidences, which have been deleted during the
+            // last sync. (These could still show up as new incidences on the server
+            // if they have been moved out and in of the calender. The next if clause
+            // would delete them on the server instead of fetching them again.
+            LOG_DEBUG("Discarding deletion" << uid);
+            it = localDeleted->erase(it);
+        } else if (!mReceivedUids.contains(uid)) {
+            // If a locally deleted incidence is still on the server, it will have
+            // been received as a new incidence. Thus, all locally
+            // deleted incindences which are not under the received incidences should
+            // be ignored, as they have already been deleted from the server.
             LOG_DEBUG("Discarding deletion" << uid);
             it = localDeleted->erase(it);
         } else {
+            // Add the uid to mLocalDeletedUids so that we do not insert the incidence as
+            // new incidence later on.
+            mLocalDeletedUids.insert(uid);
             ++it;
         }
     }
@@ -475,17 +524,16 @@ bool NotebookSyncAgent::discardRemoteChanges(KCalCore::Incidence::List *localIns
     return true;
 }
 
-int NotebookSyncAgent::removeCommonIncidences(KCalCore::Incidence::List *firstList, KCalCore::Incidence::List *secondList)
+int NotebookSyncAgent::removeCommonIncidences(KCalCore::Incidence::List *firstList, QStringList *secondList)
 {
     QSet<QString> firstListUids;
     for (int i=0; i<firstList->count(); i++) {
         firstListUids.insert(firstList->at(i)->uid());
     }
     QSet<QString> commonUids;
-    for (KCalCore::Incidence::List::iterator it = secondList->begin(); it != secondList->end();) {
-        const KCalCore::Incidence::Ptr &incidence = *it;
-        if (firstListUids.contains(incidence->uid())) {
-            commonUids.insert(incidence->uid());
+    for (QStringList::iterator it = secondList->begin(); it != secondList->end();) {
+        if (firstListUids.contains(*it)) {
+            commonUids.insert(*it);
             it = secondList->erase(it);
         } else {
             ++it;
@@ -506,6 +554,77 @@ int NotebookSyncAgent::removeCommonIncidences(KCalCore::Incidence::List *firstLi
     return removed;
 }
 
+void NotebookSyncAgent::processETags()
+{
+
+    NOTEBOOK_FUNCTION_CALL_TRACE;
+
+    Report *report = qobject_cast<Report*>(sender());
+    mRequests.remove(report);
+    report->deleteLater();
+
+    if (report->errorCode() == Buteo::SyncResults::NO_ERROR) {
+        LOG_DEBUG("Process tags for server path" << mServerPath);
+        QHash<QString, Reader::CalendarResource> map = report->receivedCalendarResources();
+
+        QStringList eventIdList;
+
+        Q_FOREACH (KCalCore::Incidence::Ptr incidence, mStorageIncidenceList) {
+            QString uri = incidence->customProperty("buteo", "uri");
+            if (uri.isEmpty()) {
+                //Newly added to Local DB -- Skip this incidence
+                continue;
+            }
+            if (!map.contains(uri)) {
+                // we have an incidence that's not on the remote server, so delete it
+                switch (incidence->type()) {
+                case KCalCore::IncidenceBase::TypeEvent:
+                case KCalCore::IncidenceBase::TypeTodo:
+                case KCalCore::IncidenceBase::TypeJournal:
+                    mIncidenceUidsToDelete.append(incidence->uid());
+                    break;
+                case KCalCore::IncidenceBase::TypeFreeBusy:
+                case KCalCore::IncidenceBase::TypeUnknown:
+                    break;
+                }
+                continue;
+            } else {
+                Reader::CalendarResource resource = map.take(uri);
+                if (mLocalETags.value(incidence->uid()) != resource.etag) {
+                    LOG_DEBUG("Will fetch update for" << resource.href
+                              << "tag changed from" << mLocalETags.value(incidence->uid())
+                              << "to" << resource.etag);
+                    eventIdList.append(resource.href);
+                }
+            }
+        }
+        LOG_DEBUG("Fetching new incidences:" << map.keys());
+        eventIdList.append(map.keys());
+        if (!eventIdList.isEmpty()) {
+            // some incidences have changed on the server, so fetch the new details
+            Report *report = new Report(mNAManager, mSettings);
+            mRequests.insert(report);
+            connect(report, SIGNAL(finished()), this, SLOT(reportRequestFinished()));
+            report->multiGetEvents(mServerPath, eventIdList);
+            return;
+        } else {
+            sendLocalChanges();
+	    return;
+        }
+
+
+    } else if (report->networkError() == QNetworkReply::AuthenticationRequiredError
+               && !mRetriedReport) {
+        // Yahoo sometimes fails the initial request with an authentication error. Let's try once more
+        qWarning() << "Retrying REPORT after request failed with QNetworkReply::AuthenticationRequiredError";
+        mRetriedReport = true;
+        sendReportRequest();
+        return;
+    }
+    emitFinished(report->errorCode(), report->errorString());
+}
+
+
 void NotebookSyncAgent::reportRequestFinished()
 {
     NOTEBOOK_FUNCTION_CALL_TRACE;
@@ -515,19 +634,44 @@ void NotebookSyncAgent::reportRequestFinished()
     report->deleteLater();
 
     if (report->errorCode() == Buteo::SyncResults::NO_ERROR) {
-        mReceivedCalendarResources = report->receivedCalendarResources();
+        mReceivedCalendarResources = report->receivedCalendarResources().values();
+
+        mReceivedUids.clear();
+        Q_FOREACH (const Reader::CalendarResource & resource, mReceivedCalendarResources) {
+            if (!resource.incidence.isNull()) {
+                mReceivedUids.insert(resource.incidence->uid());
+            }
+        }
+
         LOG_DEBUG("Received" << mReceivedCalendarResources.count() << "calendar resources");
         if (mSyncMode == QuickSync) {
-            mIncidenceUidsToDelete = report->localIncidenceUidsNotOnServer();
             sendLocalChanges();
             return;
         }
-    } else if (report->networkError() == QNetworkReply::AuthenticationRequiredError
+    } else if (mSyncMode == SlowSync
+               && report->networkError() == QNetworkReply::AuthenticationRequiredError
                && !mRetriedReport) {
         // Yahoo sometimes fails the initial request with an authentication error. Let's try once more
         qWarning() << "Retrying REPORT after request failed with QNetworkReply::AuthenticationRequiredError";
         mRetriedReport = true;
         sendReportRequest();
+        return;
+    }
+    emitFinished(report->errorCode(), report->errorString());
+}
+
+void NotebookSyncAgent::additionalReportRequestFinished()
+{
+    NOTEBOOK_FUNCTION_CALL_TRACE;
+
+    Report *report = qobject_cast<Report*>(sender());
+    mRequests.remove(report);
+    report->deleteLater();
+
+    if (report->errorCode() == Buteo::SyncResults::NO_ERROR) {
+        mReceivedCalendarResources.append(report->receivedCalendarResources().values());
+        LOG_DEBUG("Received" << mReceivedCalendarResources.count() << "calendar resources in total");
+        emitFinished(Buteo::SyncResults::NO_ERROR, QStringLiteral("Finished requests for %1").arg(mNotebook->account()));
         return;
     }
     emitFinished(report->errorCode(), report->errorString());
@@ -556,10 +700,65 @@ void NotebookSyncAgent::nonReportRequestFinished()
             }
         }
         if (mRequests.isEmpty()) {
-            emitFinished(Buteo::SyncResults::NO_ERROR, QStringLiteral("Finished requests for %1").arg(mNotebook->account()));
+            finalizeSendingLocalChanges();
         }
     }
     request->deleteLater();
+}
+
+void NotebookSyncAgent::finalizeSendingLocalChanges()
+{
+    NOTEBOOK_FUNCTION_CALL_TRACE;
+
+    QStringList hrefsToReload;
+
+    for (int i=0; i<mLocallyInsertedIncidences.count(); i++) {
+        KCalCore::Incidence::Ptr &incidence = mLocallyInsertedIncidences[i];
+        QString href = mServerPath + incidence->uid() + ".ics";
+
+        if (!mUpdatedETags.contains(incidence->uid())) {
+            LOG_DEBUG("Did not receive ETag for incidence " << incidence->uid()
+                      << " will reload from server");
+            hrefsToReload.append(href);
+        } else {
+            // Save the href we pushed the incidence to. If we set custom properties
+            // on the stored incidence, this will change its modification time.
+            // (We cannot reset the modification time as it will automatically be
+            // set by the storage backend if the incidence is saved to the database.
+            // (See SqliteStorage::Private::saveIncidences.)
+            // Thus, instead add the incidence to mReceivedCalendarResources, which
+            // will write the changes and add the incidence to the sync modifications
+            // database.
+            LOG_DEBUG("Adding URI to existing incidence:" << incidence->uid());
+            incidence->setCustomProperty("buteo", "uri", href);
+            Reader::CalendarResource resource;
+            resource.href = href;
+            resource.incidence = incidence;
+            KCalCore::ICalFormat icalFormat;
+            resource.iCalData = icalFormat.toICalString(IncidenceHandler::incidenceToExport(incidence));
+            mReceivedCalendarResources.append(resource);
+        }
+    }
+
+    for (int i=0; i<mLocallyModifiedIncidences.count(); i++) {
+        KCalCore::Incidence::Ptr &incidence = mLocallyModifiedIncidences[i];
+        if (!mUpdatedETags.contains(incidence->uid())) {
+            LOG_DEBUG("Did not receive ETag for incidence " << incidence->uid()
+                      << " will reload from server");
+            hrefsToReload.append(incidence->customProperty("buteo", "uri"));
+        }
+    }
+
+    if (!hrefsToReload.isEmpty()) {
+        // some incidences have changed on the server, so fetch the new details
+        Report *report = new Report(mNAManager, mSettings);
+        mRequests.insert(report);
+        connect(report, SIGNAL(finished()), this, SLOT(additionalReportRequestFinished()));
+        report->multiGetEvents(mServerPath, hrefsToReload);
+        return;
+    } else {
+        emitFinished(Buteo::SyncResults::NO_ERROR, QStringLiteral("Finished requests for %1").arg(mNotebook->account()));
+    }
 }
 
 void NotebookSyncAgent::emitFinished(int minorErrorCode, const QString &message)
@@ -594,13 +793,12 @@ bool NotebookSyncAgent::updateIncidences(const QList<Reader::CalendarResource> &
 
     for (int i=0; i<resources.count(); i++) {
         const Reader::CalendarResource &resource = resources.at(i);
-        if (mLocalDeletedUids.contains(Reader::hrefToUid(resource.href))) {
-            LOG_DEBUG("Ignore incidence already deleted locally:" << resource.href);
+        KCalCore::Incidence::Ptr newIncidence = resources.at(i).incidence;
+        if (newIncidence.isNull()) {
             continue;
         }
-        KCalCore::ICalFormat iCalFormat;
-        KCalCore::Incidence::Ptr newIncidence = iCalFormat.fromString(resource.iCalData);
-        if (newIncidence.isNull()) {
+        if (mLocalDeletedUids.contains(newIncidence->uid())) {
+            LOG_DEBUG("Ignore incidence already deleted locally:" << resource.href);
             continue;
         }
         // find any existing incidence with this uid
