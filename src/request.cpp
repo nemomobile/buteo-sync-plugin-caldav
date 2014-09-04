@@ -124,7 +124,7 @@ void Request::prepareRequest(QNetworkRequest *request, const QString &requestPat
         url.setUserName(mSettings->username());
         url.setPassword(mSettings->password());
     }
-    url.setPath(requestPath);
+    url.setPath(QUrl::fromPercentEncoding(requestPath.toLatin1()));
     request->setUrl(url);
 }
 
