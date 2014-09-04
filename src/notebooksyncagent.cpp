@@ -198,7 +198,7 @@ void NotebookSyncAgent::sendReportRequest()
         connect(report, SIGNAL(finished()), this, SLOT(reportRequestFinished()));
         report->getAllEvents(mServerPath, mFromDateTime, mToDateTime);
     } else {
-        fetchRemoteChanges();
+        fetchRemoteChanges(mFromDateTime, mToDateTime);
     }
 }
 
@@ -238,7 +238,7 @@ bool NotebookSyncAgent::isFinished() const
     return mFinished;
 }
 
-void NotebookSyncAgent::fetchRemoteChanges()
+void NotebookSyncAgent::fetchRemoteChanges(const QDateTime &fromDateTime, const QDateTime &toDateTime)
 {
     NOTEBOOK_FUNCTION_CALL_TRACE;
 
@@ -261,7 +261,7 @@ void NotebookSyncAgent::fetchRemoteChanges()
     if (!mStorage->deletedIncidences(&deletions, KDateTime(mChangesSinceDate), mNotebook->uid())) {
         LOG_CRITICAL("mKCal::ExtendedStorage::deletedIncidences() failed");
     }
-    report->getAllETags(mServerPath, mLocalETags, storageIncidenceList, deletions);
+    report->getAllETags(mServerPath, mLocalETags, storageIncidenceList, deletions, fromDateTime, toDateTime);
 }
 
 void NotebookSyncAgent::sendLocalChanges()
