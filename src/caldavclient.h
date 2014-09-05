@@ -154,6 +154,8 @@ private:
     Buteo::SyncProfile::SyncDirection syncDirection();
     Buteo::SyncProfile::ConflictResolutionPolicy conflictResolutionPolicy();
 
+    void setCredentialsNeedUpdate(int accountId);
+
     QList<NotebookSyncAgent *>  mNotebookSyncAgents;
     QNetworkAccessManager*      mNAManager;
     Accounts::Manager*          mManager;
