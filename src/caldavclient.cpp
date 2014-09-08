@@ -42,6 +42,8 @@
 #include <ProfileEngineDefs.h>
 #include <ProfileManager.h>
 
+static const int HTTP_UNAUTHORIZED_ACCESS = 401;
+
 extern "C" CalDavClient* createPlugin(const QString& aPluginName,
                                          const Buteo::SyncProfile& aProfile,
                                          Buteo::PluginCbInterface *aCbInterface)
@@ -334,6 +336,11 @@ void CalDavClient::syncFinished(int minorErrorCode, const QString &message)
         mResults = Buteo::SyncResults(lastSyncTime(),       // don't change the last sync time
                                       Buteo::SyncResults::SYNC_RESULT_FAILED,
                                       minorErrorCode);
+
+        if (minorErrorCode == HTTP_UNAUTHORIZED_ACCESS) {
+            setCredentialsNeedUpdate(mSettings.accountId());
+        }
+
         emit error(getProfileName(), message, minorErrorCode);
     }
 }
@@ -519,6 +526,23 @@ void CalDavClient::notebookSyncFinished(int errorCode, const QString &errorStrin
             }
         } else {
             syncFinished(Buteo::SyncResults::DATABASE_FAILURE, QStringLiteral("unable to save calendar storage"));
+        }
+    }
+}
+
+void CalDavClient::setCredentialsNeedUpdate(int accountId)
+{
+    Accounts::Account *account = mManager->account(accountId);
+    if (account) {
+        Q_FOREACH (const Accounts::Service &currService, account->services()) {
+            account->selectService(currService);
+            if (!account->value("calendars").toStringList().isEmpty()) {
+                account->setValue(QStringLiteral("CredentialsNeedUpdate"), QVariant::fromValue<bool>(true));
+                account->setValue(QStringLiteral("CredentialsNeedUpdateFrom"), QVariant::fromValue<QString>(QString::fromLatin1("caldav-sync")));
+                account->selectService(Accounts::Service());
+                account->syncAndBlock();
+                break;
+            }
         }
     }
 }
