@@ -242,26 +242,10 @@ void NotebookSyncAgent::fetchRemoteChanges(const QDateTime &fromDateTime, const 
 {
     NOTEBOOK_FUNCTION_CALL_TRACE;
 
-    // Incidences must be loaded with ExtendedStorage::allIncidences() rather than
-    // ExtendedCalendar::incidences(), because the latter will load incidences from all
-    // notebooks, rather than just the one for this report.
-    // Note that storage incidence references cannot be used with ExtendedCalendar::deleteEvent()
-    // etc. Those methods only work for references created by ExtendedCalendar.
-    KCalCore::Incidence::List storageIncidenceList;
-    if (!mStorage->allIncidences(&storageIncidenceList, mNotebook->uid())) {
-        emitFinished(Buteo::SyncResults::DATABASE_FAILURE, QString("Unable to load storage incidences for notebook: %1").arg(mNotebook->uid()));
-        return;
-    }
-
     Report *report = new Report(mNAManager, mSettings);
     mRequests.insert(report);
-    connect(report, SIGNAL(finished()), this, SLOT(reportRequestFinished()));
-
-    KCalCore::Incidence::List deletions;
-    if (!mStorage->deletedIncidences(&deletions, KDateTime(mChangesSinceDate), mNotebook->uid())) {
-        LOG_CRITICAL("mKCal::ExtendedStorage::deletedIncidences() failed");
-    }
-    report->getAllETags(mServerPath, mLocalETags, storageIncidenceList, deletions, fromDateTime, toDateTime);
+    connect(report, SIGNAL(finished()), this, SLOT(processETags()));
+    report->getAllETags(mServerPath, fromDateTime, toDateTime);
 }
 
 void NotebookSyncAgent::sendLocalChanges()
@@ -506,6 +490,106 @@ int NotebookSyncAgent::removeCommonIncidences(KCalCore::Incidence::List *firstLi
     return removed;
 }
 
+void NotebookSyncAgent::processETags()
+{
+
+    NOTEBOOK_FUNCTION_CALL_TRACE;
+
+    Report *report = qobject_cast<Report*>(sender());
+    mRequests.remove(report);
+    report->deleteLater();
+
+    if (report->errorCode() == Buteo::SyncResults::NO_ERROR) {
+        LOG_DEBUG("Process tags for server path" << mServerPath);
+        QHash<QString, Reader::CalendarResource> map = report->receivedCalendarResources();
+
+        // Incidences must be loaded with ExtendedStorage::allIncidences() rather than
+        // ExtendedCalendar::incidences(), because the latter will load incidences from all
+        // notebooks, rather than just the one for this report.
+        // Note that storage incidence references cannot be used with ExtendedCalendar::deleteEvent()
+        // etc. Those methods only work for references created by ExtendedCalendar.
+        KCalCore::Incidence::List storageIncidenceList;
+        if (!mStorage->allIncidences(&storageIncidenceList, mNotebook->uid())) {
+            emitFinished(Buteo::SyncResults::DATABASE_FAILURE, QString("Unable to load storage incidences for notebook: %1").arg(mNotebook->uid()));
+            return;
+        }
+
+        KCalCore::Incidence::List deletions;
+        if (!mStorage->deletedIncidences(&deletions, KDateTime(mChangesSinceDate), mNotebook->uid())) {
+            LOG_CRITICAL("mKCal::ExtendedStorage::deletedIncidences() failed");
+        }
+
+        QStringList eventIdList;
+
+        Q_FOREACH (KCalCore::Incidence::Ptr incidence, storageIncidenceList) {
+            QString uri = incidence->customProperty("buteo", "uri");
+            if (uri.isEmpty()) {
+                //Newly added to Local DB -- Skip this incidence
+                continue;
+            }
+            if (!map.contains(uri)) {
+                // we have an incidence that's not on the remote server, so delete it
+                switch (incidence->type()) {
+                case KCalCore::IncidenceBase::TypeEvent:
+                case KCalCore::IncidenceBase::TypeTodo:
+                case KCalCore::IncidenceBase::TypeJournal:
+                    mIncidenceUidsToDelete.append(incidence->uid());
+                    break;
+                case KCalCore::IncidenceBase::TypeFreeBusy:
+                case KCalCore::IncidenceBase::TypeUnknown:
+                    break;
+                }
+                continue;
+            } else {
+                Reader::CalendarResource resource = map.take(uri);
+                if (mLocalETags.value(incidence->uid()) != resource.etag) {
+                    LOG_DEBUG("Will fetch update for" << resource.href
+                              << "tag changed from" << mLocalETags.value(incidence->uid())
+                              << "to" << resource.etag);
+                    eventIdList.append(resource.href);
+                }
+            }
+        }
+        // if a locally deleted incidence is not on the server (i.e. was deleted), add
+        // this to the list
+        if (deletions.count()) {
+            QSet<QString> remoteUids;
+            Q_FOREACH (const QString &href, map.keys()) {
+                remoteUids.insert(Reader::hrefToUid(href));
+            }
+            Q_FOREACH (KCalCore::Incidence::Ptr incidence, deletions) {
+                if (!remoteUids.contains(incidence->uid())) {
+                    mIncidenceUidsToDelete.append(incidence->uid());
+                }
+            }
+        }
+        LOG_DEBUG("Fetching new incidences:" << map.keys());
+        eventIdList.append(map.keys());
+        if (!eventIdList.isEmpty()) {
+            // some incidences have changed on the server, so fetch the new details
+            Report *report = new Report(mNAManager, mSettings);
+            mRequests.insert(report);
+            connect(report, SIGNAL(finished()), this, SLOT(reportRequestFinished()));
+            report->multiGetEvents(mServerPath, eventIdList);
+            return;
+        } else {
+            sendLocalChanges();
+            return;
+        }
+
+
+    } else if (report->networkError() == QNetworkReply::AuthenticationRequiredError
+               && !mRetriedReport) {
+        // Yahoo sometimes fails the initial request with an authentication error. Let's try once more
+        qWarning() << "Retrying REPORT after request failed with QNetworkReply::AuthenticationRequiredError";
+        mRetriedReport = true;
+        sendReportRequest();
+        return;
+    }
+    emitFinished(report->errorCode(), report->errorString());
+}
+
+
 void NotebookSyncAgent::reportRequestFinished()
 {
     NOTEBOOK_FUNCTION_CALL_TRACE;
@@ -515,14 +599,14 @@ void NotebookSyncAgent::reportRequestFinished()
     report->deleteLater();
 
     if (report->errorCode() == Buteo::SyncResults::NO_ERROR) {
-        mReceivedCalendarResources = report->receivedCalendarResources();
+        mReceivedCalendarResources = report->receivedCalendarResources().values();
         LOG_DEBUG("Received" << mReceivedCalendarResources.count() << "calendar resources");
         if (mSyncMode == QuickSync) {
-            mIncidenceUidsToDelete = report->localIncidenceUidsNotOnServer();
             sendLocalChanges();
             return;
         }
-    } else if (report->networkError() == QNetworkReply::AuthenticationRequiredError
+    } else if (mSyncMode == SlowSync
+               && report->networkError() == QNetworkReply::AuthenticationRequiredError
                && !mRetriedReport) {
         // Yahoo sometimes fails the initial request with an authentication error. Let's try once more
         qWarning() << "Retrying REPORT after request failed with QNetworkReply::AuthenticationRequiredError";
