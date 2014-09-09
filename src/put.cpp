@@ -66,7 +66,7 @@ void Put::updateEvent(const QString &serverPath, KCalCore::Incidence::Ptr incide
     request.setHeader(QNetworkRequest::ContentTypeHeader, "text/calendar; charset=utf-8");
 
     QBuffer *buffer = new QBuffer(this);
-    buffer->setData(data.toLatin1());
+    buffer->setData(data.toUtf8());
     QNetworkReply *reply = mNAManager->sendCustomRequest(request, REQUEST_TYPE.toLatin1(), buffer);
     reply->setProperty(PROP_INCIDENCE_UID, incidence->uid());
     debugRequest(request, data);
@@ -95,7 +95,7 @@ void Put::createEvent(const QString &serverPath, KCalCore::Incidence::Ptr incide
     request.setHeader(QNetworkRequest::ContentTypeHeader, "text/calendar; charset=utf-8");
 
     QBuffer *buffer = new QBuffer(this);
-    buffer->setData(ical.toLatin1());
+    buffer->setData(ical.toUtf8());
     QNetworkReply *reply = mNAManager->sendCustomRequest(request, REQUEST_TYPE.toLatin1(), buffer);
     reply->setProperty(PROP_INCIDENCE_UID, incidence->uid());
     debugRequest(request, ical);
