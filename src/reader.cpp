@@ -27,6 +27,8 @@
 #include <QUrl>
 #include <QXmlStreamReader>
 
+#include <icalformat.h>
+
 #include <LogMacros.h>
 
 Reader::Reader(QObject *parent)
@@ -92,6 +94,10 @@ void Reader::readResponse()
     if (resource.href.isEmpty()) {
         LOG_WARNING("Ignoring received calendar object data, is missing href value");
         return;
+    }
+    if (!resource.iCalData.isEmpty()) {
+        KCalCore::ICalFormat iCalFormat;
+        resource.incidence = iCalFormat.fromString(resource.iCalData);
     }
     LOG_DEBUG(QUrl::fromPercentEncoding(resource.href.toLatin1()));
     mResults.insert(QUrl::fromPercentEncoding(resource.href.toLatin1()), resource);

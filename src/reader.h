@@ -27,6 +27,8 @@
 #include <QObject>
 #include <QHash>
 
+#include <incidence.h>
+
 class QXmlStreamReader;
 
 class Reader : public QObject
@@ -38,6 +40,7 @@ public:
         QString etag;
         QString status;
         QString iCalData;
+        KCalCore::Incidence::Ptr incidence;
     };
 
     explicit Reader(QObject *parent = 0);
