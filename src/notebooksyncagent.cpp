@@ -4,6 +4,7 @@
  * Copyright (C) 2014 Jolla Ltd. and/or its subsidiary(-ies).
  *
  * Contributors: Bea Lam <bea.lam@jollamobile.com>
+ *               Stephan Rave <mail@stephanrave.de>
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public License
@@ -394,17 +395,13 @@ bool NotebookSyncAgent::discardRemoteChanges(KCalCore::Incidence::List *localIns
         }
     }
 
-    QSet<QString> serverModifiedUids;
-    for (int i=0; i<mReceivedCalendarResources.count(); i++) {
-        serverModifiedUids.insert(Reader::hrefToUid(mReceivedCalendarResources[i].href));
-    }
     for (KCalCore::Incidence::List::iterator it = localModified->begin(); it != localModified->end();) {
         KCalCore::Incidence::Ptr sourceIncidence = *it;
         const QString &uid = sourceIncidence->uid();
-        if (remoteDeletedIncidences.contains(uid) || serverModifiedUids.contains(uid)) {
+        if (remoteDeletedIncidences.contains(uid) || mReceivedUids.contains(uid)) {
             LOG_DEBUG("Discarding modification,"
                       << (remoteDeletedIncidences.contains(uid) ? "was already deleted on server" : "")
-                      << (serverModifiedUids.contains(uid) ? "was already modified on server": ""));
+                      << (mReceivedUids.contains(uid) ? "was already modified on server": ""));
             it = localModified->erase(it);
             continue;
         } else if (modifications.contains(uid)) {
@@ -447,11 +444,22 @@ bool NotebookSyncAgent::discardRemoteChanges(KCalCore::Incidence::List *localIns
     }
     for (KCalCore::Incidence::List::iterator it = localDeleted->begin(); it != localDeleted->end();) {
         const QString &uid = (*it)->uid();
-        mLocalDeletedUids.insert(uid);
-        if (remoteDeletedIncidences.contains(uid) || deletions.indexOf(uid) >= 0) {
-            LOG_DEBUG("Discarding deletion" << uid);
+
+        if (deletions.indexOf(uid) >= 0) {
+            // Ignore locally deleted incidences which have been deleted during the last sync.
+            LOG_DEBUG("Discarding deletion from last sync:" << uid);
+            it = localDeleted->erase(it);
+        } else if (!mReceivedUids.contains(uid)) {
+            // All locally deleted incidence which are still on the server, have been received
+            // by fetchRemoteChanges. Conversely, all locally deleted incidences which are not
+            // under the received incidences should be ignored as they have already been
+            // deleted on the server.
+            LOG_DEBUG("Discarding deletion, was already deleted on server:" << uid);
             it = localDeleted->erase(it);
         } else {
+            // Add the uid to mLocalDeletedUids so that we do not insert the incidence as
+            // new incidence later on.
+            mLocalDeletedUids.insert(uid);
             ++it;
         }
     }
@@ -514,11 +522,6 @@ void NotebookSyncAgent::processETags()
             return;
         }
 
-        KCalCore::Incidence::List deletions;
-        if (!mStorage->deletedIncidences(&deletions, KDateTime(mChangesSinceDate), mNotebook->uid())) {
-            LOG_CRITICAL("mKCal::ExtendedStorage::deletedIncidences() failed");
-        }
-
         QStringList eventIdList;
 
         Q_FOREACH (KCalCore::Incidence::Ptr incidence, storageIncidenceList) {
@@ -547,19 +550,6 @@ void NotebookSyncAgent::processETags()
                               << "tag changed from" << mLocalETags.value(incidence->uid())
                               << "to" << resource.etag);
                     eventIdList.append(resource.href);
-                }
-            }
-        }
-        // if a locally deleted incidence is not on the server (i.e. was deleted), add
-        // this to the list
-        if (deletions.count()) {
-            QSet<QString> remoteUids;
-            Q_FOREACH (const QString &href, map.keys()) {
-                remoteUids.insert(Reader::hrefToUid(href));
-            }
-            Q_FOREACH (KCalCore::Incidence::Ptr incidence, deletions) {
-                if (!remoteUids.contains(incidence->uid())) {
-                    mIncidenceUidsToDelete.append(incidence->uid());
                 }
             }
         }
@@ -600,6 +590,14 @@ void NotebookSyncAgent::reportRequestFinished()
 
     if (report->errorCode() == Buteo::SyncResults::NO_ERROR) {
         mReceivedCalendarResources = report->receivedCalendarResources().values();
+
+        mReceivedUids.clear();
+        Q_FOREACH (const Reader::CalendarResource & resource, mReceivedCalendarResources) {
+            if (!resource.incidence.isNull()) {
+                mReceivedUids.insert(resource.incidence->uid());
+            }
+        }
+
         LOG_DEBUG("Received" << mReceivedCalendarResources.count() << "calendar resources");
         if (mSyncMode == QuickSync) {
             sendLocalChanges();
@@ -678,12 +676,12 @@ bool NotebookSyncAgent::updateIncidences(const QList<Reader::CalendarResource> &
 
     for (int i=0; i<resources.count(); i++) {
         const Reader::CalendarResource &resource = resources.at(i);
-        if (mLocalDeletedUids.contains(Reader::hrefToUid(resource.href))) {
-            LOG_DEBUG("Ignore incidence already deleted locally:" << resource.href);
+        KCalCore::Incidence::Ptr newIncidence = resources.at(i).incidence;
+        if (newIncidence.isNull()) {
             continue;
         }
-        const KCalCore::Incidence::Ptr &newIncidence = resource.incidence;
-        if (newIncidence.isNull()) {
+        if (mLocalDeletedUids.contains(newIncidence->uid())) {
+            LOG_DEBUG("Ignore incidence already deleted locally:" << resource.href);
             continue;
         }
         // find any existing incidence with this uid
