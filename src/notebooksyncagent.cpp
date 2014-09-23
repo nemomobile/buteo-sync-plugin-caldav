@@ -253,34 +253,34 @@ void NotebookSyncAgent::sendLocalChanges()
 {
     NOTEBOOK_FUNCTION_CALL_TRACE;
 
-    KCalCore::Incidence::List inserted;
-    KCalCore::Incidence::List modified;
     KCalCore::Incidence::List deleted;
-    if (!loadLocalChanges(mChangesSinceDate, &inserted, &modified, &deleted)) {
+    mLocallyInsertedIncidences.clear();
+    mLocallyModifiedIncidences.clear();
+    if (!loadLocalChanges(mChangesSinceDate, &mLocallyInsertedIncidences, &mLocallyModifiedIncidences, &deleted)) {
         emitFinished(Buteo::SyncResults::INTERNAL_ERROR, "Unable to load changes for calendar: " + mServerPath);
         return;
     }
-    if (inserted.isEmpty() && modified.isEmpty() && deleted.isEmpty()) {
+    if (mLocallyInsertedIncidences.isEmpty() && mLocallyModifiedIncidences.isEmpty() && deleted.isEmpty()) {
         LOG_DEBUG("No changes to send!");
         emitFinished(Buteo::SyncResults::NO_ERROR, "Done, no local changes for " + mServerPath);
         return;
     }
     LOG_DEBUG("Total changes for" << mServerPath << ":"
-              << "inserted = " << inserted.count()
-              << "modified = " << modified.count()
+              << "inserted = " << mLocallyInsertedIncidences.count()
+              << "modified = " << mLocallyModifiedIncidences.count()
               << "deleted = " << deleted.count());
 
-    for (int i=0; i<inserted.count(); i++) {
+    for (int i=0; i<mLocallyInsertedIncidences.count(); i++) {
         Put *put = new Put(mNAManager, mSettings);
         mRequests.insert(put);
         connect(put, SIGNAL(finished()), this, SLOT(nonReportRequestFinished()));
-        put->createEvent(mServerPath, inserted[i]);
+        put->createEvent(mServerPath, mLocallyInsertedIncidences[i]);
     }
-    for (int i=0; i<modified.count(); i++) {
+    for (int i=0; i<mLocallyModifiedIncidences.count(); i++) {
         Put *put = new Put(mNAManager, mSettings);
         mRequests.insert(put);
         connect(put, SIGNAL(finished()), this, SLOT(nonReportRequestFinished()));
-        put->updateEvent(mServerPath, modified[i], mLocalETags.value(modified[i]->uid()));
+        put->updateEvent(mServerPath, mLocallyModifiedIncidences[i], mLocalETags.value(mLocallyModifiedIncidences[i]->uid()));
     }
     for (int i=0; i<deleted.count(); i++) {
         Delete *del = new Delete(mNAManager, mSettings);
@@ -632,6 +632,23 @@ void NotebookSyncAgent::reportRequestFinished()
     emitFinished(report->errorCode(), report->errorString());
 }
 
+void NotebookSyncAgent::additionalReportRequestFinished()
+{
+    NOTEBOOK_FUNCTION_CALL_TRACE;
+
+    Report *report = qobject_cast<Report*>(sender());
+    mRequests.remove(report);
+    report->deleteLater();
+
+    if (report->errorCode() == Buteo::SyncResults::NO_ERROR) {
+        mReceivedCalendarResources.append(report->receivedCalendarResources().values());
+        LOG_DEBUG("Received" << mReceivedCalendarResources.count() << "calendar resources in total");
+        emitFinished(Buteo::SyncResults::NO_ERROR, QStringLiteral("Finished requests for %1").arg(mNotebook->account()));
+        return;
+    }
+    emitFinished(report->errorCode(), report->errorString());
+}
+
 void NotebookSyncAgent::nonReportRequestFinished()
 {
     NOTEBOOK_FUNCTION_CALL_TRACE;
@@ -655,10 +672,66 @@ void NotebookSyncAgent::nonReportRequestFinished()
             }
         }
         if (mRequests.isEmpty()) {
-            emitFinished(Buteo::SyncResults::NO_ERROR, QStringLiteral("Finished requests for %1").arg(mNotebook->account()));
+            finalizeSendingLocalChanges();
         }
     }
     request->deleteLater();
+}
+
+void NotebookSyncAgent::finalizeSendingLocalChanges()
+{
+    NOTEBOOK_FUNCTION_CALL_TRACE;
+
+    QStringList hrefsToReload;
+
+    for (int i=0; i<mLocallyInsertedIncidences.count(); i++) {
+        KCalCore::Incidence::Ptr &incidence = mLocallyInsertedIncidences[i];
+        QString href = mServerPath + incidence->uid() + ".ics";
+
+        if (!mUpdatedETags.contains(incidence->uid())) {
+            LOG_DEBUG("Did not receive ETag for incidence " << incidence->uid()
+                      << " will reload from server");
+            hrefsToReload.append(href);
+        } else {
+            // We still need to save the href of this incidence. Otherwise, processETags
+            // will not be able to identify the incidence on the server during the next sync.
+            // If we set custom properties of an incidence, this will change its modification
+            // time. (We also cannot reset the modification time as it will be automatically
+            // set by the storage backend when the incidence is saved to the database.
+            // (See SqliteStorage::Private::saveIncidences of mkcal.)
+            // As a workaround, add the incidence to mReceivedCalendarResources, which
+            // will write the changes and add the incidence to the sync modifications
+            // database, so the custom property change is not picked up as a local
+            // modification during next sync.
+            LOG_DEBUG("Adding URI to existing incidence:" << incidence->uid());
+            incidence->setCustomProperty("buteo", "uri", href);
+            Reader::CalendarResource resource;
+            resource.href = href;
+            resource.incidence = incidence;
+            KCalCore::ICalFormat icalFormat;
+            resource.iCalData = icalFormat.toICalString(IncidenceHandler::incidenceToExport(incidence));
+            mReceivedCalendarResources.append(resource);
+        }
+    }
+
+    for (int i=0; i<mLocallyModifiedIncidences.count(); i++) {
+        KCalCore::Incidence::Ptr &incidence = mLocallyModifiedIncidences[i];
+        if (!mUpdatedETags.contains(incidence->uid())) {
+            LOG_DEBUG("Did not receive ETag for incidence " << incidence->uid()
+                      << " will reload from server");
+            hrefsToReload.append(incidence->customProperty("buteo", "uri"));
+        }
+    }
+
+    if (!hrefsToReload.isEmpty()) {
+        Report *report = new Report(mNAManager, mSettings);
+        mRequests.insert(report);
+        connect(report, SIGNAL(finished()), this, SLOT(additionalReportRequestFinished()));
+        report->multiGetEvents(mServerPath, hrefsToReload);
+        return;
+    } else {
+        emitFinished(Buteo::SyncResults::NO_ERROR, QStringLiteral("Finished requests for %1").arg(mNotebook->account()));
+    }
 }
 
 void NotebookSyncAgent::emitFinished(int minorErrorCode, const QString &message)
