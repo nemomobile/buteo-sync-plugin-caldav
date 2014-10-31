@@ -195,14 +195,16 @@ void IncidenceHandler::copyIncidenceProperties(KCalCore::Incidence::Ptr dest, co
 
     // Recurrences need to be copied through serialization, else they are not recreated.
     // Do this first to avoid overriding other copied properties.
-    dest->clearRecurrence();
-    QBuffer buffer;
-    buffer.open(QBuffer::ReadWrite);
-    QDataStream out(&buffer);
-    out << *src.data();
-    QDataStream in(&buffer);
-    buffer.seek(0);
-    in >> *dest.data();
+    if (*(dest->recurrence()) != *(src->recurrence())) {
+        dest->clearRecurrence();
+        QBuffer buffer;
+        buffer.open(QBuffer::ReadWrite);
+        QDataStream out(&buffer);
+        out << *src.data();
+        QDataStream in(&buffer);
+        buffer.seek(0);
+        in >> *dest.data();
+    }
 
     // copy the duration before the dtEnd as calling setDuration() changes the dtEnd
     COPY_IF_NOT_EQUAL(dest, src, duration(), setDuration);
