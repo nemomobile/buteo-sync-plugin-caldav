@@ -684,7 +684,7 @@ void NotebookSyncAgent::nonReportRequestFinished()
 
     if (request->errorCode() != Buteo::SyncResults::NO_ERROR) {
         LOG_CRITICAL("Aborting sync," << request->command() << "failed" << request->errorString() << "for notebook:" << mNotebook->account());
-        emitFinished(Buteo::SyncResults::INTERNAL_ERROR, request->errorString());
+        emitFinished(request->errorCode(), request->errorString());
     } else {
         Put *putRequest = qobject_cast<Put*>(request);
         if (putRequest) {

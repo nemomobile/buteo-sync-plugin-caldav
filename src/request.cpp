@@ -68,7 +68,8 @@ void Request::finishedWithReplyResult(QNetworkReply::NetworkError error)
         finishedWithSuccess();
     } else {
         int errorCode = Buteo::SyncResults::INTERNAL_ERROR;
-        if (error == QNetworkReply::SslHandshakeFailedError) {
+        if (error == QNetworkReply::SslHandshakeFailedError || error == QNetworkReply::ContentAccessDenied ||
+                error == QNetworkReply::AuthenticationRequiredError) {
             errorCode = Buteo::SyncResults::AUTHENTICATION_FAILURE;
         } else if (error < 200) {
             errorCode = Buteo::SyncResults::CONNECTION_ERROR;

@@ -42,8 +42,6 @@
 #include <ProfileEngineDefs.h>
 #include <ProfileManager.h>
 
-static const int HTTP_UNAUTHORIZED_ACCESS = 401;
-
 extern "C" CalDavClient* createPlugin(const QString& aPluginName,
                                          const Buteo::SyncProfile& aProfile,
                                          Buteo::PluginCbInterface *aCbInterface)
@@ -337,7 +335,7 @@ void CalDavClient::syncFinished(int minorErrorCode, const QString &message)
                                       Buteo::SyncResults::SYNC_RESULT_FAILED,
                                       minorErrorCode);
 
-        if (minorErrorCode == HTTP_UNAUTHORIZED_ACCESS) {
+        if (minorErrorCode == Buteo::SyncResults::AUTHENTICATION_FAILURE) {
             setCredentialsNeedUpdate(mSettings.accountId());
         }
 
