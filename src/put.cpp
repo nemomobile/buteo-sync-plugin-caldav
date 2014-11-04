@@ -51,9 +51,9 @@ void Put::updateEvent(const QString &serverPath, KCalCore::Incidence::Ptr incide
     Q_UNUSED(serverPath);
 
     KCalCore::ICalFormat icalFormat;
-    QString data = icalFormat.toICalString(IncidenceHandler::incidenceToExport(incidence));
-    if (data == NULL || data.isEmpty()) {
-        LOG_WARNING("Error while converting iCal Object to string");
+    QByteArray data = icalFormat.toICalString(IncidenceHandler::incidenceToExport(incidence)).toUtf8();
+    if (data.isEmpty()) {
+        LOG_WARNING("Error while converting iCal Object to QByteArray");
         return;
     }
     QString uri  = incidence->customProperty("buteo", "uri");
@@ -63,10 +63,11 @@ void Put::updateEvent(const QString &serverPath, KCalCore::Incidence::Ptr incide
     // 'uri' contains the calendar path + filename
     prepareRequest(&request, uri);
     request.setRawHeader("If-Match", eTag.toLatin1());
+    request.setHeader(QNetworkRequest::ContentLengthHeader, data.length());
     request.setHeader(QNetworkRequest::ContentTypeHeader, "text/calendar; charset=utf-8");
 
     QBuffer *buffer = new QBuffer(this);
-    buffer->setData(data.toUtf8());
+    buffer->setData(data);
     QNetworkReply *reply = mNAManager->sendCustomRequest(request, REQUEST_TYPE.toLatin1(), buffer);
     reply->setProperty(PROP_INCIDENCE_UID, incidence->uid());
     debugRequest(request, data);
@@ -80,9 +81,9 @@ void Put::createEvent(const QString &serverPath, KCalCore::Incidence::Ptr incide
     FUNCTION_CALL_TRACE;
 
     KCalCore::ICalFormat icalFormat;
-    QString ical = icalFormat.toICalString(IncidenceHandler::incidenceToExport(incidence));
-    if (ical == NULL) {
-        LOG_WARNING("Error while converting iCal Object to string");
+    QByteArray ical = icalFormat.toICalString(IncidenceHandler::incidenceToExport(incidence)).toUtf8();
+    if (ical.isEmpty()) {
+        LOG_WARNING("Error while converting iCal Object to QByteArray");
         return;
     }
 
@@ -95,7 +96,7 @@ void Put::createEvent(const QString &serverPath, KCalCore::Incidence::Ptr incide
     request.setHeader(QNetworkRequest::ContentTypeHeader, "text/calendar; charset=utf-8");
 
     QBuffer *buffer = new QBuffer(this);
-    buffer->setData(ical.toUtf8());
+    buffer->setData(ical);
     QNetworkReply *reply = mNAManager->sendCustomRequest(request, REQUEST_TYPE.toLatin1(), buffer);
     reply->setProperty(PROP_INCIDENCE_UID, incidence->uid());
     debugRequest(request, ical);

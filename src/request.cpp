@@ -141,7 +141,7 @@ void Request::debugRequest(const QNetworkRequest &request, const QByteArray &dat
 
 void Request::debugRequest(const QNetworkRequest &request, const QString &data)
 {
-    LOG_PROTOCOL(debuggingString(request, data.toLatin1()));
+    LOG_PROTOCOL(debuggingString(request, data.toUtf8()));
 }
 
 void Request::debugReply(const QNetworkReply &reply, const QByteArray &data)
