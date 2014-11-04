@@ -120,7 +120,7 @@ void Report::multiGetEvents(const QString &serverPath, const QStringList &eventI
                              "<d:prop><d:getetag /><c:calendar-data /></d:prop>";
     Q_FOREACH (const QString &eventId , eventIdList) {
         requestData.append("<d:href>");
-        requestData.append(eventId);
+        requestData.append(eventId.toUtf8());
         requestData.append("</d:href>");
     }
     requestData.append("</c:calendar-multiget>");
@@ -137,6 +137,7 @@ void Report::sendRequest(const QString& serverPath, const QByteArray &requestDat
     prepareRequest(&request, serverPath);
     request.setRawHeader("Depth", "1");
     request.setRawHeader("Prefer", "return-minimal");
+    request.setHeader(QNetworkRequest::ContentLengthHeader, requestData.length());
     request.setHeader(QNetworkRequest::ContentTypeHeader, "application/xml; charset=utf-8");
     QBuffer *buffer = new QBuffer(this);
     buffer->setData(requestData);
