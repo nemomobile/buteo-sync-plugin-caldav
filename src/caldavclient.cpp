@@ -276,7 +276,9 @@ bool CalDavClient::initConfig()
 
     account->selectService(srv);
     mSettings.setServerAddress(account->value("server_address").toString());
+    mSettings.setIgnoreSSLErrors(account->value("ignore_ssl_errors").toBool());
     account->selectService(Accounts::Service());
+
     if (mSettings.serverAddress().isEmpty()) {
         LOG_CRITICAL("remote_address not found in service settings");
         return false;
@@ -289,7 +291,6 @@ bool CalDavClient::initConfig()
     connect(mAuth, SIGNAL(success()), this, SLOT(start()));
     connect(mAuth, SIGNAL(failed()), this, SLOT(authenticationError()));
 
-    mSettings.setIgnoreSSLErrors(true);
     mSettings.setAccountId(accountId);
 
     mSyncDirection = iProfile.syncDirection();
