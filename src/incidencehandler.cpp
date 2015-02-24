@@ -173,7 +173,7 @@ bool IncidenceHandler::todosEqual(const KCalCore::Todo::Ptr &a, const KCalCore::
     return true;
 }
 
-bool IncidenceHandler::journalsEqual(const KCalCore::Journal::Ptr &a, const KCalCore::Journal::Ptr &b)
+bool IncidenceHandler::journalsEqual(const KCalCore::Journal::Ptr &, const KCalCore::Journal::Ptr &)
 {
     // no journal-specific properties; it only uses the base incidence properties
     return true;
@@ -193,17 +193,30 @@ void IncidenceHandler::copyIncidenceProperties(KCalCore::Incidence::Ptr dest, co
     KDateTime origCreated = dest->created();
     KDateTime origLastModified = dest->lastModified();
 
-    // Recurrences need to be copied through serialization, else they are not recreated.
-    // Do this first to avoid overriding other copied properties.
+    // Copy recurrence information if required.
     if (*(dest->recurrence()) != *(src->recurrence())) {
-        dest->clearRecurrence();
-        QBuffer buffer;
-        buffer.open(QBuffer::ReadWrite);
-        QDataStream out(&buffer);
-        out << *src.data();
-        QDataStream in(&buffer);
-        buffer.seek(0);
-        in >> *dest.data();
+        dest->recurrence()->clear();
+
+        KCalCore::Recurrence *dr = dest->recurrence();
+        KCalCore::Recurrence *sr = src->recurrence();
+
+        // recurrence rules and dates
+        KCalCore::RecurrenceRule::List srRRules = sr->rRules();
+        for (QList<KCalCore::RecurrenceRule*>::const_iterator it = srRRules.constBegin(), end = srRRules.constEnd(); it != end; ++it) {
+            KCalCore::RecurrenceRule *r = new KCalCore::RecurrenceRule(*(*it));
+            dr->addRRule(r);
+        }
+        dr->setRDates(sr->rDates());
+        dr->setRDateTimes(sr->rDateTimes());
+
+        // exception rules and dates
+        KCalCore::RecurrenceRule::List srExRules = sr->exRules();
+        for (QList<KCalCore::RecurrenceRule*>::const_iterator it = srExRules.constBegin(), end = srExRules.constEnd(); it != end; ++it) {
+            KCalCore::RecurrenceRule *r = new KCalCore::RecurrenceRule(*(*it));
+            dr->addExRule(r);
+        }
+        dr->setExDates(sr->exDates());
+        dr->setExDateTimes(sr->exDateTimes());
     }
 
     // copy the duration before the dtEnd as calling setDuration() changes the dtEnd

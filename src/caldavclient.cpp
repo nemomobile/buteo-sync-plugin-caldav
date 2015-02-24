@@ -416,7 +416,7 @@ void CalDavClient::start()
         getSyncDateRange(mSyncStartTime, &fromDateTime, &toDateTime);
         notebooks = mStorage->notebooks();
     }
-    LOG_DEBUG("\n\n++++++++++++++ mSyncStartTime:" << mSyncStartTime << "LAST SYNC:" << lastSyncTime());
+    LOG_DEBUG("++++++++++++++ mSyncStartTime:" << mSyncStartTime << "LAST SYNC:" << lastSyncTime());
 
     Q_FOREACH (const Settings::CalendarInfo &calendarInfo, allCalendarInfo) {
         mKCal::Notebook::Ptr existingNotebook;
