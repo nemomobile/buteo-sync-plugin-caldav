@@ -123,6 +123,9 @@ bool IncidenceHandler::copiedPropertiesAreEqual(const KCalCore::Incidence::Ptr &
     normalizePersonEmail(&personB);
     RETURN_FALSE_IF_NOT_EQUAL_CUSTOM(personA != personB, "organizer", (personA.fullName() + " " + personB.fullName()));
 
+    // check recurrence information
+    RETURN_FALSE_IF_NOT_EQUAL_CUSTOM(*(a->recurrence()) != *(b->recurrence()), "recurrence", "...");
+
     switch (a->type()) {
     case KCalCore::IncidenceBase::TypeEvent:
         if (!eventsEqual(a.staticCast<KCalCore::Event>(), b.staticCast<KCalCore::Event>())) {
