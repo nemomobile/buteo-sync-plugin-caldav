@@ -25,7 +25,7 @@
 #define READER_H
 
 #include <QObject>
-#include <QHash>
+#include <QMultiHash>
 
 #include <incidence.h>
 
@@ -40,14 +40,14 @@ public:
         QString etag;
         QString status;
         QString iCalData;
-        KCalCore::Incidence::Ptr incidence;
+        KCalCore::Incidence::List incidences;
     };
 
     explicit Reader(QObject *parent = 0);
     ~Reader();
 
     void read(const QByteArray &data);
-    const QHash<QString, CalendarResource>& results() const;
+    const QMultiHash<QString, CalendarResource>& results() const;
 
 private:
     void readMultiStatus();
@@ -57,7 +57,7 @@ private:
 
 private:
     QXmlStreamReader *mReader;
-    QHash<QString, CalendarResource> mResults;
+    QMultiHash<QString, CalendarResource> mResults;
 };
 
 #endif // READER_H

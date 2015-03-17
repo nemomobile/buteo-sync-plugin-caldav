@@ -28,6 +28,7 @@
 #include "reader.h"
 
 #include <QObject>
+#include <QMultiHash>
 
 class QNetworkAccessManager;
 class Settings;
@@ -47,7 +48,7 @@ public:
                      const QDateTime &toDateTime = QDateTime());
     void multiGetEvents(const QString &serverPath, const QStringList &eventIdList);
 
-    QHash<QString, Reader::CalendarResource> receivedCalendarResources() const;
+    QMultiHash<QString, Reader::CalendarResource> receivedCalendarResources() const;
 
 private Q_SLOTS:
     void processResponse();
@@ -59,7 +60,7 @@ private:
                            const QDateTime &toDateTime,
                            bool getCalendarData);
     QString mServerPath;
-    QHash<QString, Reader::CalendarResource> mReceivedResources;
+    QMultiHash<QString, Reader::CalendarResource> mReceivedResources;
 };
 
 #endif // REPORT_H

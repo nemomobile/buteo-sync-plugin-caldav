@@ -136,22 +136,30 @@ bool Request::wasDeleted() const
 
 void Request::debugRequest(const QNetworkRequest &request, const QByteArray &data)
 {
-    LOG_PROTOCOL(debuggingString(request, data));
+    Q_FOREACH (QString line, debuggingString(request, data).split('\n', QString::SkipEmptyParts)) {
+        LOG_PROTOCOL(line.replace('\r', ' '));
+    }
 }
 
 void Request::debugRequest(const QNetworkRequest &request, const QString &data)
 {
-    LOG_PROTOCOL(debuggingString(request, data.toUtf8()));
+    Q_FOREACH (QString line, debuggingString(request, data.toUtf8()).split('\n', QString::SkipEmptyParts)) {
+        LOG_PROTOCOL(line.replace('\r', ' '));
+    }
 }
 
 void Request::debugReply(const QNetworkReply &reply, const QByteArray &data)
 {
-    LOG_PROTOCOL(debuggingString(reply, data));
+    Q_FOREACH (QString line, debuggingString(reply, data).split('\n', QString::SkipEmptyParts)) {
+        LOG_PROTOCOL(line.replace('\r', ' '));
+    }
 }
 
 void Request::debugReplyAndReadAll(QNetworkReply *reply)
 {
-    LOG_PROTOCOL(debuggingString(*reply, reply->readAll()));
+    Q_FOREACH (QString line, debuggingString(*reply, reply->readAll()).split('\n', QString::SkipEmptyParts)) {
+        LOG_PROTOCOL(line.replace('\r', ' '));
+    }
 }
 
 QString Request::debuggingString(const QNetworkRequest &request, const QByteArray &data)
