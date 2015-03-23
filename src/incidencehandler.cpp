@@ -229,7 +229,6 @@ void IncidenceHandler::copyIncidenceProperties(KCalCore::Incidence::Ptr dest, co
         KCalCore::Event::Ptr destEvent = dest.staticCast<KCalCore::Event>();
         KCalCore::Event::Ptr srcEvent = src.staticCast<KCalCore::Event>();
         COPY_IF_NOT_EQUAL(destEvent, srcEvent, dtEnd(), setDtEnd);
-        COPY_IF_NOT_EQUAL(destEvent, srcEvent, hasEndDate(), setHasEndDate);
         COPY_IF_NOT_EQUAL(destEvent, srcEvent, transparency(), setTransparency);
     }
 
@@ -368,7 +367,6 @@ KCalCore::Incidence::Ptr IncidenceHandler::incidenceToExport(KCalCore::Incidence
             // all-day event, so remove the DTEND before upsyncing.
             LOG_DEBUG("Remove DTEND from" << incidence->uid());
             event->setDtEnd(KDateTime());
-            event->setHasEndDate(false);
         } else if (event->hasEndDate()) {
             KDateTime dt = event->dtEnd();
             // Event::dtEnd() is inclusive, but DTEND in iCalendar format is exclusive.
