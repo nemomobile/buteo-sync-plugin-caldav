@@ -27,7 +27,6 @@ HEADERS += \
     reader.h \
     settings.h \
     request.h \
-    get.h \
     authhandler.h \
     incidencehandler.h \
     notebooksyncagent.h
@@ -40,7 +39,6 @@ SOURCES += \
     reader.cpp \
     settings.cpp \
     request.cpp \
-    get.cpp \
     authhandler.cpp \
     incidencehandler.cpp \
     notebooksyncagent.cpp

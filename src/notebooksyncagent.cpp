@@ -48,23 +48,6 @@
 
 #define NOTEBOOK_FUNCTION_CALL_TRACE FUNCTION_CALL_TRACE(QString("%1 %2").arg(Q_FUNC_INFO).arg(mNotebook ? mNotebook->account() : ""))
 
-static KCalCore::Incidence::Ptr fetchIncidence(const mKCal::ExtendedCalendar::Ptr &calendar, const KCalId &kcalid)
-{
-    KCalCore::Event::Ptr event = calendar->event(kcalid.uid, kcalid.recurrenceId);
-    if (event) {
-        return event;
-    }
-    KCalCore::Journal::Ptr journal = calendar->journal(kcalid.uid, kcalid.recurrenceId);
-    if (journal) {
-        return journal;
-    }
-    KCalCore::Todo::Ptr todo = calendar->todo(kcalid.uid, kcalid.recurrenceId);
-    if (todo) {
-        return todo;
-    }
-    return KCalCore::Incidence::Ptr();
-}
-
 NotebookSyncAgent::NotebookSyncAgent(mKCal::ExtendedCalendar::Ptr calendar,
                                      mKCal::ExtendedStorage::Ptr storage,
                                      CalDavCalendarDatabase *database,
@@ -555,7 +538,7 @@ bool NotebookSyncAgent::discardRemoteChanges(KCalCore::Incidence::List *localIns
                 // This incidence has been modified since it was added from the server in the last sync,
                 // so it's a modification rather than an addition.
                 LOG_DEBUG("Moving to modified:" << kcalid.toString());
-                KCalCore::Incidence::Ptr savedIncidence = fetchIncidence(mCalendar, kcalid);
+                KCalCore::Incidence::Ptr savedIncidence = mCalendar->incidence(kcalid.uid, kcalid.recurrenceId);
                 if (savedIncidence) {
                     localModified->append(savedIncidence);
                     it = localInserted->erase(it);
