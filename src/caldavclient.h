@@ -147,6 +147,7 @@ private:
     void closeConfig();
     void syncFinished(int minorErrorCode, const QString &message);
     void clearAgents();
+    bool deleteNotebook(int accountId, mKCal::ExtendedCalendar::Ptr calendar, mKCal::ExtendedStorage::Ptr storage, mKCal::Notebook::Ptr notebook);
     void deleteNotebooksForAccount(int accountId, mKCal::ExtendedCalendar::Ptr calendar, mKCal::ExtendedStorage::Ptr storage);
     void getSyncDateRange(const QDateTime &sourceDate, QDateTime *fromDateTime, QDateTime *toDateTime);
     QList<Settings::CalendarInfo> loadCalendars(Accounts::Account *account, Accounts::Service srv) const;
@@ -170,6 +171,7 @@ private:
     Settings                    mSettings;
     QDateTime                   mSyncStartTime;
     bool                        mFirstSync;
+    int                         mAccountId;
 };
 
 /*! \brief Creates CalDav client plugin

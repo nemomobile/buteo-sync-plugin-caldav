@@ -102,7 +102,8 @@ void NotebookSyncAgent::clearRequests()
 
     Step 2) is triggered by CalDavClient once *all* notebook syncs have finished.
  */
-void NotebookSyncAgent::startSlowSync(const QString &notebookName,
+void NotebookSyncAgent::startSlowSync(const QString &calendarPath,
+                                      const QString &notebookName,
                                       const QString &notebookAccountId,
                                       const QString &pluginName,
                                       const QString &syncProfile,
@@ -130,8 +131,9 @@ void NotebookSyncAgent::startSlowSync(const QString &notebookName,
                      + mNotebook->uid() + " for account/calendar " + mNotebook->account());
         return;
     }
-    LOG_DEBUG("NOTEBOOK created" << mNotebook->uid() << "account:" << mNotebook->account());
 
+    mDatabase->addRemoteCalendar(mNotebook->uid(), calendarPath);
+    LOG_DEBUG("Remote calendar" << calendarPath << "mapped to newly created notebook" << mNotebook->uid() << "in OOB db for account" << mNotebook->account());
     sendReportRequest();
 }
 
@@ -214,9 +216,10 @@ void NotebookSyncAgent::finalize()
               << mUpdatedETags.count() << "updated etags");
 
     // remove additions, modifications and deletions from the last sync session
-    // (don't call removeEntries() as that clears etags also)
+    // (don't call removeEntries() as that clears etags and calendars also)
     mDatabase->removeIncidenceChangeEntriesOnly(mNotebook->uid());
 
+    mDatabase->setNeedsCleanSync(mNotebook->uid(), false); // TODO: on error, set to true?
     if (mNewRemoteIncidenceIds.count()) {
         mDatabase->insertAdditions(mNotebook->uid(), mNewRemoteIncidenceIds);
         mNewRemoteIncidenceIds.clear();

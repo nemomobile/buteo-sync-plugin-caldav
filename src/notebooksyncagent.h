@@ -56,7 +56,8 @@ public:
                                QObject *parent = 0);
     ~NotebookSyncAgent();
 
-    void startSlowSync(const QString &notebookName,
+    void startSlowSync(const QString &calendarPath,
+                       const QString &notebookName,
                        const QString &notebookAccountId,
                        const QString &pluginName,
                        const QString &syncProfile,
