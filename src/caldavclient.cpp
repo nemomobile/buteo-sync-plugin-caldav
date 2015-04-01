@@ -64,6 +64,7 @@ CalDavClient::CalDavClient(const QString& aPluginName,
     , mCalendar(0)
     , mStorage(0)
     , mFirstSync(true)
+    , mAccountId(0)
 {
     FUNCTION_CALL_TRACE;
 }
@@ -149,6 +150,7 @@ bool CalDavClient::cleanUp()
         return false;
     }
 
+    mAccountId = accountId;
     mKCal::ExtendedCalendar::Ptr calendar = mKCal::ExtendedCalendar::Ptr(new mKCal::ExtendedCalendar(KDateTime::Spec::UTC()));
     mKCal::ExtendedStorage::Ptr storage = mKCal::ExtendedCalendar::defaultStorage(calendar);
     if (!storage->open()) {
@@ -163,27 +165,37 @@ bool CalDavClient::cleanUp()
     return true;
 }
 
+bool CalDavClient::deleteNotebook(int accountId, mKCal::ExtendedCalendar::Ptr calendar, mKCal::ExtendedStorage::Ptr storage, mKCal::Notebook::Ptr notebook)
+{
+    if (storage->loadNotebookIncidences(notebook->uid())) {
+        calendar->deleteAllIncidences();
+    } else {
+        LOG_WARNING("Unable to load incidences for notebook:" << notebook->uid() << "for account:" << accountId);
+    }
+    LOG_DEBUG("About to purge all OOB data for notebook:" << notebook->uid());
+    mDatabase->removeEntries(notebook->uid());
+    if (storage->deleteNotebook(notebook)) {
+        return true;
+    }
+
+    LOG_WARNING("Unable to delete notebook:" << notebook->uid() << "for account:" << accountId);
+    return false;
+}
+
 void CalDavClient::deleteNotebooksForAccount(int accountId, mKCal::ExtendedCalendar::Ptr calendar, mKCal::ExtendedStorage::Ptr storage)
 {
     FUNCTION_CALL_TRACE;
 
-    QString notebookAccountPrefix = QString::number(accountId) + "-";
+    QString notebookAccountPrefix = QString::number(accountId) + "-"; // for historical reasons!
+    QString accountIdStr = QString::number(accountId);
     mKCal::Notebook::List notebookList = storage->notebooks();
     LOG_DEBUG("Total Number of Notebooks in device = " << notebookList.count());
     int deletedCount = 0;
     Q_FOREACH (mKCal::Notebook::Ptr notebook, notebookList) {
-        if (notebook->account().startsWith(notebookAccountPrefix)) {
-            if (storage->loadNotebookIncidences(notebook->uid())) {
-                calendar->deleteAllIncidences();
-            } else {
-                LOG_WARNING("Unable to load incidences for notebook:" << notebook->uid() << "for account:" << accountId);
-            }
-            if (storage->deleteNotebook(notebook)) {
+        if (notebook->account() == accountIdStr || notebook->account().startsWith(notebookAccountPrefix)) {
+            if (deleteNotebook(accountId, calendar, storage, notebook)) {
                 deletedCount++;
-            } else {
-                LOG_WARNING("Unable to delete notebook:" << notebook->uid() << "for account:" << accountId);
             }
-            mDatabase->removeEntries(notebook->uid());
         }
     }
     LOG_DEBUG("Deleted" << deletedCount << "notebooks");
@@ -250,6 +262,7 @@ bool CalDavClient::initConfig()
         LOG_CRITICAL("no account id specified," << Buteo::KEY_ACCOUNT_ID << "not found in profile");
         return false;
     }
+    mAccountId = accountId;
     Accounts::Account *account = mManager->account(accountId);
     if (!account) {
         LOG_CRITICAL("cannot find account" << accountId);
@@ -418,15 +431,78 @@ void CalDavClient::start()
     }
     LOG_DEBUG("++++++++++++++ mSyncStartTime:" << mSyncStartTime << "LAST SYNC:" << lastSyncTime());
 
-    Q_FOREACH (const Settings::CalendarInfo &calendarInfo, allCalendarInfo) {
-        mKCal::Notebook::Ptr existingNotebook;
-        Q_FOREACH (mKCal::Notebook::Ptr notebook, notebooks) {
-            if (notebook->account() == mSettings.notebookId(calendarInfo.serverPath)) {
-                existingNotebook = notebook;
-                break;
+    // first, purge any notebooks which are associated with this account which are no
+    // longer tracked in our out of band database.  This can occur due to error or if
+    // the OOB db is deleted as part of a package upgrade / schema upgrade.
+    bool ok = true;
+    QSet<QString> knownNotebookUids = mDatabase->knownNotebookUids(&ok);
+    if (!ok) {
+        LOG_DEBUG("error occurred while querying known notebooks from OOB db");
+        syncFinished(Buteo::SyncResults::DATABASE_FAILURE, "unable to query mapped notebooks");
+        return;
+    }
+    Q_FOREACH (const QString &knownNotebookUid, knownNotebookUids) {
+        LOG_TRACE("Have known notebook:" << knownNotebookUid);
+    }
+
+    mKCal::Notebook::List validNotebooks;
+    for (int i = 0; i < notebooks.size(); ++i) {
+        mKCal::Notebook::Ptr notebook = notebooks[i];
+        if (notebook->account().startsWith(QStringLiteral("%1-").arg(QString::number(mAccountId)))
+                || notebook->account() == QString::number(mAccountId)) {
+            // This notebook is for this account.
+            LOG_TRACE("Have notebook:" << notebook->uid() << "for account:" << mAccountId << notebook->account());
+            // Note that the first check exists for historical reasons,
+            // as we used to store calendar-path information in the account id field.
+            if (knownNotebookUids.contains(notebook->uid())) {
+                // this is a valid, mapped notebook.
+                validNotebooks.append(notebook);
+            } else {
+                // purge this notebook, as we no longer track it in our OOB db.
+                LOG_DEBUG("found old notebook:" << notebook->uid() << "for account" << mAccountId << "; purging");
+                if (!deleteNotebook(mAccountId, mCalendar, mStorage, notebook)) {
+                    LOG_DEBUG("failed to purge unmapped notebook:" << notebook->uid());
+                    syncFinished(Buteo::SyncResults::DATABASE_FAILURE, "failed to purge unmapped notebook");
+                    return;
+                }
             }
         }
+    }
+
+    // for each calendar path we need to sync:
+    //  - if it is mapped to a known notebook, we need to perform either clean sync or quick sync
+    //  - if no known notebook exists for it, we need to create one and perform clean sync
+    Q_FOREACH (const Settings::CalendarInfo &calendarInfo, allCalendarInfo) {
+        mKCal::Notebook::Ptr existingNotebook;
+        Q_FOREACH (mKCal::Notebook::Ptr notebook, validNotebooks) {
+            if (mDatabase->remoteCalendarPath(notebook->uid(), &ok) == calendarInfo.serverPath) {
+                LOG_DEBUG("found notebook:" << notebook->uid() << "for remote calendar:" << calendarInfo.serverPath);
+                existingNotebook = notebook;
+                break;
+            } else if (!ok) {
+                LOG_DEBUG("error occurred while querying calendar path mapped to notebook:" << notebook->uid());
+                syncFinished(Buteo::SyncResults::DATABASE_FAILURE, "unable to determine remote calendar path for notebook");
+                return;
+            }
+        }
+
         if (existingNotebook) {
+            if (mDatabase->needsCleanSync(existingNotebook->uid(), &ok)) {
+                LOG_DEBUG("Deleting notebook" << existingNotebook->uid() << "for account" << mAccountId << "as it needs clean sync");
+                if (!deleteNotebook(mAccountId, mCalendar, mStorage, existingNotebook)) {
+                    LOG_DEBUG("Failed to delete notebook" << existingNotebook->uid() << "which was marked for clean sync");
+                    syncFinished(Buteo::SyncResults::DATABASE_FAILURE, "unable to delete notebook for clean sync");
+                    return;
+                }
+                existingNotebook.clear();
+            }
+        } else {
+            LOG_DEBUG("no notebook exists for calendar path:" << calendarInfo.serverPath << ", creating new");
+        }
+
+        if (existingNotebook) {
+            // the notebook exists and we didn't need to do a clean sync.
+            LOG_DEBUG("notebook exists, performing quick sync for" << calendarInfo.serverPath);
             if (!mStorage->loadNotebookIncidences(existingNotebook->uid())) {
                 syncFinished(Buteo::SyncResults::DATABASE_FAILURE, "unable to load calendar storage");
                 return;
@@ -439,12 +515,15 @@ void CalDavClient::start()
             calendarIncidences = mCalendar->incidences(existingNotebook->uid());
             agent->startQuickSync(existingNotebook, lastSyncTime(), calendarIncidences, fromDateTime, toDateTime);
         } else {
+            // the notebook did not already exist, or we needed to do a clean sync.
+            LOG_DEBUG("performing slow sync for" << calendarInfo.serverPath);
             NotebookSyncAgent *agent = new NotebookSyncAgent(mCalendar, mStorage, mDatabase, mNAManager, &mSettings, calendarInfo.serverPath, this);
             connect(agent, SIGNAL(finished(int,QString)),
                     this, SLOT(notebookSyncFinished(int,QString)));
             mNotebookSyncAgents.append(agent);
-            agent->startSlowSync(calendarInfo.displayName,
-                                 mSettings.notebookId(calendarInfo.serverPath),
+            agent->startSlowSync(calendarInfo.serverPath,
+                                 calendarInfo.displayName,
+                                 QString::number(mAccountId),
                                  getPluginName(),
                                  getProfileName(),
                                  calendarInfo.color,
@@ -510,14 +589,16 @@ void CalDavClient::notebookSyncFinished(int errorCode, const QString &errorStrin
             for (int i=0; i<mNotebookSyncAgents.count(); i++) {
                 mNotebookSyncAgents[i]->finalize();
             }
-            LOG_DEBUG("Any database changes to write? (including clearing of entries)" << mDatabase->hasChanges());
+            LOG_DEBUG("Any OOB database changes to write? (including clearing of entries)" << mDatabase->hasChanges());
             if (mDatabase->hasChanges()) {
                 // commit and wait for database changes to be written
                 mDatabase->commit();
                 mDatabase->wait();
                 if (mDatabase->writeStatus() == CalDavCalendarDatabase::Error) {
+                    LOG_DEBUG("Error writing changes to OOB database");
                     syncFinished(Buteo::SyncResults::DATABASE_FAILURE, QString("Unable to write to database"));
                 } else if (mDatabase->writeStatus() == CalDavCalendarDatabase::Finished) {
+                    LOG_DEBUG("Successfully wrote changes to OOB database");
                     syncFinished(Buteo::SyncResults::NO_ERROR, QString());
                 }
             } else {

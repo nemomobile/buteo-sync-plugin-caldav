@@ -25,6 +25,8 @@
 
 #include "reader.h"
 
+#include <kcalid.h>
+
 #include <extendedcalendar.h>
 #include <extendedstorage.h>
 
@@ -54,7 +56,8 @@ public:
                                QObject *parent = 0);
     ~NotebookSyncAgent();
 
-    void startSlowSync(const QString &notebookName,
+    void startSlowSync(const QString &calendarPath,
+                       const QString &notebookName,
                        const QString &notebookAccountId,
                        const QString &pluginName,
                        const QString &syncProfile,
@@ -89,33 +92,36 @@ private:
 
     void fetchRemoteChanges(const QDateTime &fromDateTime, const QDateTime &toDateTime);
     bool updateIncidences(const QList<Reader::CalendarResource> &resources);
-    bool deleteIncidences(const QStringList &incidenceUids);
+    bool updateIncidence(KCalCore::Incidence::Ptr incidence, const Reader::CalendarResource &resource, bool *criticalError);
+    bool deleteIncidences(const QSet<KCalId> &incidenceUids);
 
     void sendLocalChanges();
+    QString constructLocalChangeIcs(KCalCore::Incidence::Ptr updatedIncidence);
     void finalizeSendingLocalChanges();
     bool loadLocalChanges(const QDateTime &fromDate,
                           KCalCore::Incidence::List *inserted,
                           KCalCore::Incidence::List *modified,
-                          QStringList *deleted);
+                          QSet<KCalId> *deleted);
     bool discardRemoteChanges(KCalCore::Incidence::List *localInserted,
                               KCalCore::Incidence::List *localModified,
-                              QStringList *localDeleted);
+                              QSet<KCalId> *localDeleted);
     int removeCommonIncidences(KCalCore::Incidence::List *inserted,
-                               QStringList *deleted);
+                               QSet<KCalId> *deleted);
 
     KCalCore::Incidence::List mCalendarIncidencesBeforeSync;
     KCalCore::Incidence::List mStorageIncidenceList;
     KCalCore::Incidence::List mLocallyInsertedIncidences;
     KCalCore::Incidence::List mLocallyModifiedIncidences;
-    QSet<QString> mStorageUids;
-    QSet<QString> mLocalDeletedUids;
     QList<Reader::CalendarResource> mReceivedCalendarResources;
-    QSet<QString> mReceivedUids;
-    QStringList mNewRemoteIncidenceIds;
-    QHash<QString,QString> mModifiedIncidenceICalData;
-    QHash<QString,QString> mLocalETags;
-    QHash<QString,QString> mUpdatedETags;
-    QStringList mIncidenceUidsToDelete;
+    QSet<KCalId> mStorageIds;
+    QSet<KCalId> mLocalDeletedIds;
+    QSet<KCalId> mRemoteModifiedIds;
+    QSet<KCalId> mNewRemoteIncidenceIds;
+    QSet<KCalId> mIncidenceIdsToDelete;
+    QSet<QString> mRemoteUids;
+    QHash<KCalId,QString> mModifiedIncidenceICalData;
+    QHash<QString,QString> mLocalETags;   // etags are for resources, not incidences, hence the key is URI
+    QHash<QString,QString> mUpdatedETags; // etags are for resources, not incidences, hence the key is URI
     QSet<Request *> mRequests;
     QNetworkAccessManager* mNAManager;
     CalDavCalendarDatabase* mDatabase;

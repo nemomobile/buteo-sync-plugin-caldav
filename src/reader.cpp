@@ -28,6 +28,7 @@
 #include <QXmlStreamReader>
 
 #include <icalformat.h>
+#include <memorycalendar.h>
 
 #include <LogMacros.h>
 
@@ -53,7 +54,7 @@ void Reader::read(const QByteArray &data)
     }
 }
 
-const QHash<QString, Reader::CalendarResource>& Reader::results() const
+const QMultiHash<QString, Reader::CalendarResource>& Reader::results() const
 {
     return mResults;
 }
@@ -83,10 +84,40 @@ void Reader::readResponse()
     }
     if (!resource.iCalData.isEmpty()) {
         KCalCore::ICalFormat iCalFormat;
-        resource.incidence = iCalFormat.fromString(resource.iCalData);
+        KCalCore::MemoryCalendar::Ptr cal(new KCalCore::MemoryCalendar(KDateTime::UTC));
+        if (!iCalFormat.fromString(cal, resource.iCalData)) {
+            LOG_WARNING("unable to parse iCal data");
+        } else {
+            KCalCore::Event::List events = cal->events(); // TODO: incidences() not just events()
+            LOG_DEBUG("iCal data contains" << cal->events().count() << "VEVENT instances");
+            if (events.count() <= 1) {
+                // single event, or journal/todos
+                KCalCore::Incidence::Ptr incidence = iCalFormat.fromString(resource.iCalData);
+                if (!incidence.isNull()) {
+                    resource.incidences = KCalCore::Incidence::List() << incidence;
+                } else {
+                    LOG_WARNING("iCal data doesn't contain a valid incidence");
+                }
+            } else {
+                // contains some recurring event information, with exception / RECURRENCE-ID defined.
+                QString eventUid = events.first()->uid();
+                Q_FOREACH (const KCalCore::Event::Ptr &event, events) {
+                    if (event->uid() != eventUid) {
+                        LOG_WARNING("iCal data contains invalid events with conflicting uids");
+                        eventUid.clear();
+                        break;
+                    }
+                }
+                if (!eventUid.isEmpty()) {
+                    Q_FOREACH (const KCalCore::Event::Ptr &event, events) {
+                        resource.incidences.append(event);
+                    }
+                }
+                LOG_DEBUG("parsed" << resource.incidences.count() << "events from the iCal data");
+            }
+        }
     }
-    LOG_DEBUG(QUrl::fromPercentEncoding(resource.href.toLatin1()));
-    mResults.insert(QUrl::fromPercentEncoding(resource.href.toLatin1()), resource);
+    mResults.insert(QUrl::fromPercentEncoding(resource.href.toLatin1()), resource); // multihash insert.
 }
 
 void Reader::readPropStat(CalendarResource *resource)

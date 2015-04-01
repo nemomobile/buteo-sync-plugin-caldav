@@ -33,6 +33,8 @@
 
 #include <incidence.h>
 
+#include <kcalid.h>
+
 class QNetworkAccessManager;
 class Settings;
 
@@ -43,8 +45,8 @@ class Put : public Request
 public:
     explicit Put(QNetworkAccessManager *manager, Settings *settings, QObject *parent = 0);
 
-    void updateEvent(const QString &serverPath, KCalCore::Incidence::Ptr incidence, const QString &eTag);
-    void createEvent(const QString &serverPath, KCalCore::Incidence::Ptr incidence);
+    void updateEvent(const QString &serverPath, const QString &icalData, const QString &eTag, const QString &uri, const KCalId &kcalId);
+    void createEvent(const QString &serverPath, const QString &icalData, const KCalId &kcalId);
 
     QHash<QString,QString> updatedETags() const;
 
@@ -52,7 +54,7 @@ private Q_SLOTS:
     void requestFinished();
 
 private:
-    QStringList mUidList;
+    QSet<KCalId> mIdList;
     QHash<QString,QString> mUpdatedETags;
 };
 

@@ -37,30 +37,32 @@
 
 #include <LogMacros.h>
 
-#define PROP_INCIDENCE_UID "uid"
+#define PROP_INCIDENCE_URI "uri"
 
 Put::Put(QNetworkAccessManager *manager, Settings *settings, QObject *parent)
     : Request(manager, settings, "PUT", parent)
 {
 }
 
-void Put::updateEvent(const QString &serverPath, KCalCore::Incidence::Ptr incidence, const QString &eTag)
+void Put::updateEvent(const QString &serverPath, const QString &icalData, const QString &eTag, const QString &uri, const KCalId &kcalId)
 {
     FUNCTION_CALL_TRACE;
-
     Q_UNUSED(serverPath);
 
-    KCalCore::ICalFormat icalFormat;
-    QByteArray data = icalFormat.toICalString(IncidenceHandler::incidenceToExport(incidence)).toUtf8();
+    if (mIdList.contains(kcalId)) {
+        LOG_WARNING("Already uploaded modification to event with id:" << kcalId.toString());
+        return;
+    }
+
+    mIdList.insert(kcalId);
+    QByteArray data = icalData.toUtf8();
     if (data.isEmpty()) {
         LOG_WARNING("Error while converting iCal Object to QByteArray");
         return;
     }
-    QString uri  = incidence->customProperty("buteo", "uri");
-    mUidList.append(incidence->uid());
-    QNetworkRequest request;
 
     // 'uri' contains the calendar path + filename
+    QNetworkRequest request;
     prepareRequest(&request, uri);
     request.setRawHeader("If-Match", eTag.toLatin1());
     request.setHeader(QNetworkRequest::ContentLengthHeader, data.length());
@@ -69,37 +71,41 @@ void Put::updateEvent(const QString &serverPath, KCalCore::Incidence::Ptr incide
     QBuffer *buffer = new QBuffer(this);
     buffer->setData(data);
     QNetworkReply *reply = mNAManager->sendCustomRequest(request, REQUEST_TYPE.toLatin1(), buffer);
-    reply->setProperty(PROP_INCIDENCE_UID, incidence->uid());
+    reply->setProperty(PROP_INCIDENCE_URI, uri);
     debugRequest(request, data);
     connect(reply, SIGNAL(finished()), this, SLOT(requestFinished()));
     connect(reply, SIGNAL(sslErrors(QList<QSslError>)),
             this, SLOT(slotSslErrors(QList<QSslError>)));
 }
 
-void Put::createEvent(const QString &serverPath, KCalCore::Incidence::Ptr incidence)
+void Put::createEvent(const QString &serverPath, const QString &icalData, const KCalId &kcalId)
 {
     FUNCTION_CALL_TRACE;
 
-    KCalCore::ICalFormat icalFormat;
-    QByteArray ical = icalFormat.toICalString(IncidenceHandler::incidenceToExport(incidence)).toUtf8();
-    if (ical.isEmpty()) {
+    if (mIdList.contains(kcalId)) {
+        LOG_WARNING("Already uploaded modification to event with id:" << kcalId.toString());
+        return;
+    }
+
+    mIdList.insert(kcalId);
+    QByteArray data = icalData.toUtf8();
+    if (data.isEmpty()) {
         LOG_WARNING("Error while converting iCal Object to QByteArray");
         return;
     }
 
-    QString uid  = incidence->uid();
-    mUidList.append(incidence->uid());
     QNetworkRequest request;
-    prepareRequest(&request, serverPath + uid + ".ics");
+    QString uri = serverPath + kcalId.uid + ".ics";
+    prepareRequest(&request, uri);
     request.setRawHeader("If-None-Match", "*");
-    request.setHeader(QNetworkRequest::ContentLengthHeader, ical.length());
+    request.setHeader(QNetworkRequest::ContentLengthHeader, data.length());
     request.setHeader(QNetworkRequest::ContentTypeHeader, "text/calendar; charset=utf-8");
 
     QBuffer *buffer = new QBuffer(this);
-    buffer->setData(ical);
+    buffer->setData(data);
     QNetworkReply *reply = mNAManager->sendCustomRequest(request, REQUEST_TYPE.toLatin1(), buffer);
-    reply->setProperty(PROP_INCIDENCE_UID, incidence->uid());
-    debugRequest(request, ical);
+    reply->setProperty(PROP_INCIDENCE_URI, uri);
+    debugRequest(request, data);
     connect(reply, SIGNAL(finished()), this, SLOT(requestFinished()));
     connect(reply, SIGNAL(sslErrors(QList<QSslError>)),
             this, SLOT(slotSslErrors(QList<QSslError>)));
@@ -124,7 +130,7 @@ void Put::requestFinished()
     // Server may update the etag as soon as the modification is received and send back a new etag
     Q_FOREACH (const QNetworkReply::RawHeaderPair &header, reply->rawHeaderPairs()) {
         if (header.first.toLower() == QStringLiteral("etag")) {
-            mUpdatedETags.insert(reply->property(PROP_INCIDENCE_UID).toString(), header.second);
+            mUpdatedETags.insert(reply->property(PROP_INCIDENCE_URI).toString(), header.second);
         }
     }
 
