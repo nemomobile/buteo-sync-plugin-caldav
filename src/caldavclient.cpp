@@ -64,6 +64,7 @@ CalDavClient::CalDavClient(const QString& aPluginName,
     , mCalendar(0)
     , mStorage(0)
     , mFirstSync(true)
+    , mSyncAborted(false)
     , mAccountId(0)
 {
     FUNCTION_CALL_TRACE;
@@ -128,7 +129,7 @@ void CalDavClient::abortSync(Sync::SyncStatus aStatus)
 void CalDavClient::abort(Sync::SyncStatus status)
 {
     FUNCTION_CALL_TRACE;
-
+    mSyncAborted = true;
     syncFinished(status, QStringLiteral("Sync aborted"));
 }
 
@@ -210,6 +211,10 @@ void CalDavClient::connectivityStateChanged(Sync::ConnectivityType aType, bool a
 {
     FUNCTION_CALL_TRACE;
     LOG_DEBUG("Received connectivity change event:" << aType << " changed to " << aState);
+    if (aType == Sync::CONNECTIVITY_INTERNET && !aState) {
+        // we lost connectivity during sync.
+        abortSync(Sync::SYNC_CONNECTION_ERROR);
+    }
 }
 
 QList<Settings::CalendarInfo> CalDavClient::loadCalendars(Accounts::Account *account, Accounts::Service srv) const
@@ -473,6 +478,7 @@ void CalDavClient::start()
     //  - if it is mapped to a known notebook, we need to perform either clean sync or quick sync
     //  - if no known notebook exists for it, we need to create one and perform clean sync
     Q_FOREACH (const Settings::CalendarInfo &calendarInfo, allCalendarInfo) {
+        QString notebookUidToDelete;
         mKCal::Notebook::Ptr existingNotebook;
         Q_FOREACH (mKCal::Notebook::Ptr notebook, validNotebooks) {
             if (mDatabase->remoteCalendarPath(notebook->uid(), &ok) == calendarInfo.serverPath) {
@@ -488,12 +494,13 @@ void CalDavClient::start()
 
         if (existingNotebook) {
             if (mDatabase->needsCleanSync(existingNotebook->uid(), &ok)) {
-                LOG_DEBUG("Deleting notebook" << existingNotebook->uid() << "for account" << mAccountId << "as it needs clean sync");
-                if (!deleteNotebook(mAccountId, mCalendar, mStorage, existingNotebook)) {
-                    LOG_DEBUG("Failed to delete notebook" << existingNotebook->uid() << "which was marked for clean sync");
-                    syncFinished(Buteo::SyncResults::DATABASE_FAILURE, "unable to delete notebook for clean sync");
-                    return;
-                }
+                // If we delete the notebook immediately, the local calendar will be cleared
+                // and if sync subsequently fails (due to connection loss) then we will be
+                // left without any data (until the next scheduled sync).
+                // So, instead of deleting it here, we just queue it for deletion until such
+                // time as we have completed all of our communication with the remote server.
+                LOG_DEBUG("Queuing deletion of notebook" << existingNotebook->uid() << "for account" << mAccountId << "as it needs clean sync");
+                notebookUidToDelete = existingNotebook->uid();
                 existingNotebook.clear();
             }
         } else {
@@ -528,7 +535,8 @@ void CalDavClient::start()
                                  getProfileName(),
                                  calendarInfo.color,
                                  fromDateTime,
-                                 toDateTime);
+                                 toDateTime,
+                                 notebookUidToDelete);
         }
     }
     if (mNotebookSyncAgents.isEmpty()) {
@@ -578,7 +586,7 @@ void CalDavClient::notebookSyncFinished(int errorCode, const QString &errorStrin
             break;
         }
     }
-    if (finished) {
+    if (finished && !mSyncAborted) {
         for (int i=0; i<mNotebookSyncAgents.count(); i++) {
             if (!mNotebookSyncAgents[i]->applyRemoteChanges()) {
                 syncFinished(Buteo::SyncResults::INTERNAL_ERROR, QStringLiteral("unable to write notebook changes"));

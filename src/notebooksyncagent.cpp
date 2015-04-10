@@ -109,7 +109,8 @@ void NotebookSyncAgent::startSlowSync(const QString &calendarPath,
                                       const QString &syncProfile,
                                       const QString &color,
                                       const QDateTime &fromDateTime,
-                                      const QDateTime &toDateTime)
+                                      const QDateTime &toDateTime,
+                                      const QString &notebookUidToDelete)
 {
     NOTEBOOK_FUNCTION_CALL_TRACE;
 
@@ -117,23 +118,16 @@ void NotebookSyncAgent::startSlowSync(const QString &calendarPath,
               << "between" << fromDateTime << "to" << toDateTime);
 
     mSyncMode = SlowSync;
+    mCalendarPath = calendarPath;
+    mNotebookName = notebookName;
+    mNotebookAccountId = notebookAccountId;
+    mPluginName = pluginName;
+    mSyncProfile = syncProfile;
+    mColor = color;
     mFromDateTime = fromDateTime;
     mToDateTime = toDateTime;
+    mNotebookUidToDelete = notebookUidToDelete;
 
-    mNotebook = mKCal::Notebook::Ptr(new mKCal::Notebook(notebookName, QString()));
-    mNotebook->setAccount(notebookAccountId);
-    mNotebook->setPluginName(pluginName);
-    mNotebook->setSyncProfile(syncProfile);
-    mNotebook->setColor(color);
-
-    if (!mStorage->addNotebook(mNotebook)) {
-        emitFinished(Buteo::SyncResults::INTERNAL_ERROR, "unable to add notebook "
-                     + mNotebook->uid() + " for account/calendar " + mNotebook->account());
-        return;
-    }
-
-    mDatabase->addRemoteCalendar(mNotebook->uid(), calendarPath);
-    LOG_DEBUG("Remote calendar" << calendarPath << "mapped to newly created notebook" << mNotebook->uid() << "in OOB db for account" << mNotebook->account());
     sendReportRequest();
 }
 
@@ -856,7 +850,7 @@ void NotebookSyncAgent::nonReportRequestFinished()
     mRequests.remove(request);
 
     if (request->errorCode() != Buteo::SyncResults::NO_ERROR) {
-        LOG_CRITICAL("Aborting sync," << request->command() << "failed" << request->errorString() << "for notebook:" << mNotebook->account());
+        LOG_CRITICAL("Aborting sync," << request->command() << "failed" << request->errorString() << "for notebook" << mCalendarPath << "of account:" << mNotebookAccountId);
         emitFinished(request->errorCode(), request->errorString());
     } else {
         Put *putRequest = qobject_cast<Put*>(request);
@@ -948,6 +942,38 @@ void NotebookSyncAgent::emitFinished(int minorErrorCode, const QString &message)
 bool NotebookSyncAgent::applyRemoteChanges()
 {
     NOTEBOOK_FUNCTION_CALL_TRACE;
+
+    if (mSyncMode == SlowSync) {
+        // delete the existing notebook associated with this calendar path, if it exists
+        if (!mNotebookUidToDelete.isEmpty()) {
+            mStorage->loadNotebookIncidences(mNotebookUidToDelete);
+            mKCal::Notebook::Ptr doomedNotebook = mStorage->notebook(mNotebookUidToDelete);
+            if (doomedNotebook) {
+                LOG_DEBUG("Deleting notebook which was queued for deletion:" << mNotebookUidToDelete);
+                if (!mStorage->deleteNotebook(doomedNotebook)) {
+                    LOG_DEBUG("Failed to delete notebook" << mNotebookUidToDelete << "which was marked for clean sync");
+                    return false;
+                }
+            } else {
+                LOG_DEBUG("Failed to find notebook which was queued for deletion:" << mNotebookUidToDelete);
+                return false;
+            }
+        }
+
+        // and create a new one
+        mNotebook = mKCal::Notebook::Ptr(new mKCal::Notebook(mNotebookName, QString()));
+        mNotebook->setAccount(mNotebookAccountId);
+        mNotebook->setPluginName(mPluginName);
+        mNotebook->setSyncProfile(mSyncProfile);
+        mNotebook->setColor(mColor);
+        if (!mStorage->addNotebook(mNotebook)) {
+            LOG_DEBUG("Unable to (re)create notebook" << mNotebookName << "during slow sync for account" << mNotebookAccountId << ":" << mCalendarPath);
+            return false;
+        }
+
+        mDatabase->addRemoteCalendar(mNotebook->uid(), mCalendarPath);
+        LOG_DEBUG("Remote calendar" << mCalendarPath << "mapped to newly created notebook" << mNotebook->uid() << "in OOB db for account" << mNotebook->account());
+    }
 
     if (!updateIncidences(mReceivedCalendarResources)) {
         return false;
