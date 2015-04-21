@@ -171,6 +171,7 @@ private:
     Settings                    mSettings;
     QDateTime                   mSyncStartTime;
     bool                        mFirstSync;
+    bool                        mSyncAborted;
     int                         mAccountId;
 };
 

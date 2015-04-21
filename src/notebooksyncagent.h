@@ -63,7 +63,8 @@ public:
                        const QString &syncProfile,
                        const QString &color,
                        const QDateTime &fromDateTime,
-                       const QDateTime &toDateTime);
+                       const QDateTime &toDateTime,
+                       const QString &notebookUidToDelete);
 
     void startQuickSync(mKCal::Notebook::Ptr notebook,
                         const QDateTime &changesSinceDate,
@@ -136,6 +137,15 @@ private:
     SyncMode mSyncMode;
     bool mFinished;
     bool mRetriedReport;
+
+    // these are used only in slow-sync mode.
+    QString mCalendarPath;
+    QString mNotebookName;
+    QString mNotebookAccountId;
+    QString mPluginName;
+    QString mSyncProfile;
+    QString mColor;
+    QString mNotebookUidToDelete;
 };
 
 #endif // NOTEBOOKSYNCAGENT_P_H
