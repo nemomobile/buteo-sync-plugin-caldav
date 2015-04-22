@@ -405,6 +405,64 @@ void CalDavClient::start()
         return;
     }
 
+    // HACK FOR UPGRADE-1.1.5:
+    //    - remove any notebooks associated with this account
+    //    - remove any notebooks associated with non-existent accounts
+    //    - set mFirstSync = true.
+    {
+        QString accountIdString = iProfile.key(Buteo::KEY_ACCOUNT_ID);
+        int accountId = accountIdString.toInt();
+        QString settingsFileName = QString::fromLatin1("/home/nemo/.local/share/system/privileged/Sync/caldav.ini");
+        QSettings settingsFile(settingsFileName, QSettings::IniFormat);
+        bool alreadyClean = settingsFile.value(QStringLiteral("%1-cleaned").arg(accountId), QVariant::fromValue<bool>(false)).toBool();
+        if (!alreadyClean) {
+            // first, delete any data associated with this account, so this sync will be a clean sync.
+            qWarning() << "Deleting caldav notebooks associated with this account:" << accountId << "due to clean sync";
+            deleteNotebooksForAccount(accountId, mCalendar, mStorage);
+            // now delete notebooks for non-existent accounts.
+            qWarning() << "Deleting caldav notebooks associated with nonexistent accounts due to clean sync";
+            // a) find out which accounts are associated with each of our notebooks.
+            QList<int> notebookAccountIds;
+            mKCal::Notebook::List allNotebooks = mStorage->notebooks();
+            Q_FOREACH (mKCal::Notebook::Ptr nb, allNotebooks) {
+                QString nbAccount = nb->account();
+                if (nbAccount.isEmpty()) {
+                    // not a synced account, ignore.
+                } else {
+                    // caldav notebook->account() values are like: "55-/user/calendars/someCalendar"
+                    int indexOfHyphen = nbAccount.indexOf('-');
+                    if (nb->pluginName().contains(QStringLiteral("caldav")) && indexOfHyphen > 0) {
+                        // this is a caldav notebook, since it uses "accountId-remoteServerPath" form
+                        nbAccount.chop(nbAccount.length() - indexOfHyphen);
+                        bool ok = true;
+                        int notebookAccountId = nbAccount.toInt(&ok);
+                        if (!ok) {
+                            qWarning() << "notebook account value was strange:" << nb->account() << "->" << nbAccount << "->" << "not ok";
+                        } else {
+                            qWarning() << "found account id:" << notebookAccountId << "for" << nb->account() << "->" << nbAccount;
+                            if (!notebookAccountIds.contains(notebookAccountId)) {
+                                notebookAccountIds.append(notebookAccountId);
+                            }
+                        }
+                    }
+                }
+            }
+            // b) find out if any of those accounts don't exist - if not,
+            Accounts::AccountIdList accountIdList = mManager->accountList();
+            Q_FOREACH (int notebookAccountId, notebookAccountIds) {
+                if (!accountIdList.contains(notebookAccountId)) {
+                    qWarning() << "purging notebooks for deleted caldav account" << notebookAccountId;
+                    deleteNotebooksForAccount(notebookAccountId, mCalendar, mStorage);
+                }
+            }
+
+            // finished; set mFirstSync=true so that this sync is a clean sync.
+            qWarning() << "Finished pre-sync cleanup with caldav account" << accountId;
+            settingsFile.setValue(QStringLiteral("%1-cleaned").arg(accountId), QVariant::fromValue<bool>(true));
+            mFirstSync = true;
+        }
+    }
+
     QDateTime fromDateTime;
     QDateTime toDateTime;
     mKCal::Notebook::List notebooks;
