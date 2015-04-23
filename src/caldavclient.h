@@ -42,7 +42,6 @@
 #include <Accounts/Manager>
 
 class QNetworkAccessManager;
-class CalDavCalendarDatabase;
 class Request;
 
 /*
@@ -137,7 +136,6 @@ public Q_SLOTS:
 private Q_SLOTS:
     void start();
     void authenticationError();
-    void databaseWriteStatusChanged();
     void notebookSyncFinished(int errorCode, const QString &errorString);
 
 private:
@@ -149,6 +147,7 @@ private:
     void clearAgents();
     bool deleteNotebook(int accountId, mKCal::ExtendedCalendar::Ptr calendar, mKCal::ExtendedStorage::Ptr storage, mKCal::Notebook::Ptr notebook);
     void deleteNotebooksForAccount(int accountId, mKCal::ExtendedCalendar::Ptr calendar, mKCal::ExtendedStorage::Ptr storage);
+    bool cleanSyncRequired(int accountId);
     void getSyncDateRange(const QDateTime &sourceDate, QDateTime *fromDateTime, QDateTime *toDateTime);
     QList<Settings::CalendarInfo> loadCalendars(Accounts::Account *account, Accounts::Service srv) const;
 
@@ -161,7 +160,6 @@ private:
     QNetworkAccessManager*      mNAManager;
     Accounts::Manager*          mManager;
     AuthHandler*                mAuth;
-    CalDavCalendarDatabase*     mDatabase;
     mKCal::ExtendedCalendar::Ptr mCalendar;
     mKCal::ExtendedStorage::Ptr mStorage;
     Buteo::SyncResults          mResults;

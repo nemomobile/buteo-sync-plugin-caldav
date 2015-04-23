@@ -5,7 +5,7 @@ QT       += network dbus
 
 CONFIG += link_pkgconfig debug console
 PKGCONFIG += buteosyncfw5 libsignon-qt5 accounts-qt5 signon-oauth2plugin \
-             libsailfishkeyprovider libkcalcoren-qt5 libmkcal-qt5 socialcache
+             libsailfishkeyprovider libkcalcoren-qt5 libmkcal-qt5
 
 VER_MAJ = 0
 VER_MIN = 1

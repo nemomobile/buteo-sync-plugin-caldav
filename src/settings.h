@@ -31,7 +31,7 @@ class Settings
 {
 public:
     struct CalendarInfo {
-        QString serverPath;
+        QString remotePath;
         QString displayName;
         QString color;
     };
@@ -58,8 +58,6 @@ public:
 
     void setCalendars(const QList<CalendarInfo> &calendars);
     QList<CalendarInfo> calendars() const;
-
-    QString notebookId(const QString &calendarServerPath) const;
 
 private:
     QList<CalendarInfo> mCalendars;
