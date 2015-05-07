@@ -117,6 +117,7 @@ void Reader::readResponse()
             }
         }
     }
+
     mResults.insert(QUrl::fromPercentEncoding(resource.href.toLatin1()), resource); // multihash insert.
 }
 

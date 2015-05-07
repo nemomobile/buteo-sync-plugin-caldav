@@ -44,24 +44,22 @@ Put::Put(QNetworkAccessManager *manager, Settings *settings, QObject *parent)
 {
 }
 
-void Put::updateEvent(const QString &serverPath, const QString &icalData, const QString &eTag, const QString &uri, const KCalId &kcalId)
+void Put::updateEvent(const QString &remoteCalendarPath, const QString &icalData, const QString &eTag, const QString &uri, const QString &localUid)
 {
     FUNCTION_CALL_TRACE;
-    Q_UNUSED(serverPath);
 
-    if (mIdList.contains(kcalId)) {
-        LOG_WARNING("Already uploaded modification to event with id:" << kcalId.toString());
+    if (mLocalUidList.contains(localUid)) {
+        LOG_WARNING("Already uploaded modification to event with uid:" << localUid);
         return;
     }
 
-    mIdList.insert(kcalId);
+    mLocalUidList.insert(localUid);
     QByteArray data = icalData.toUtf8();
     if (data.isEmpty()) {
         LOG_WARNING("Error while converting iCal Object to QByteArray");
         return;
     }
 
-    // 'uri' contains the calendar path + filename
     QNetworkRequest request;
     prepareRequest(&request, uri);
     request.setRawHeader("If-Match", eTag.toLatin1());
@@ -78,16 +76,16 @@ void Put::updateEvent(const QString &serverPath, const QString &icalData, const 
             this, SLOT(slotSslErrors(QList<QSslError>)));
 }
 
-void Put::createEvent(const QString &serverPath, const QString &icalData, const KCalId &kcalId)
+void Put::createEvent(const QString &remoteCalendarPath, const QString &icalData, const QString &localUid)
 {
     FUNCTION_CALL_TRACE;
 
-    if (mIdList.contains(kcalId)) {
-        LOG_WARNING("Already uploaded modification to event with id:" << kcalId.toString());
+    if (mLocalUidList.contains(localUid)) {
+        LOG_WARNING("Already uploaded modification to event with id:" << localUid);
         return;
     }
 
-    mIdList.insert(kcalId);
+    mLocalUidList.insert(localUid);
     QByteArray data = icalData.toUtf8();
     if (data.isEmpty()) {
         LOG_WARNING("Error while converting iCal Object to QByteArray");
@@ -95,7 +93,7 @@ void Put::createEvent(const QString &serverPath, const QString &icalData, const 
     }
 
     QNetworkRequest request;
-    QString uri = serverPath + kcalId.uid + ".ics";
+    QString uri = remoteCalendarPath + localUid + ".ics";
     prepareRequest(&request, uri);
     request.setRawHeader("If-None-Match", "*");
     request.setHeader(QNetworkRequest::ContentLengthHeader, data.length());

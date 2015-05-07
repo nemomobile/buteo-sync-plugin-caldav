@@ -308,7 +308,8 @@ void IncidenceHandler::copyIncidenceProperties(KCalCore::Incidence::Ptr dest, co
 
 void IncidenceHandler::prepareImportedIncidence(KCalCore::Incidence::Ptr incidence)
 {
-    if (!incidence->type() == KCalCore::IncidenceBase::TypeEvent) {
+    if (incidence->type() != KCalCore::IncidenceBase::TypeEvent) {
+        LOG_WARNING("unable to handle imported non-event incidence; skipping");
         return;
     }
     KCalCore::Event::Ptr event = incidence.staticCast<KCalCore::Event>();
@@ -352,11 +353,12 @@ void IncidenceHandler::prepareImportedIncidence(KCalCore::Incidence::Ptr inciden
 KCalCore::Incidence::Ptr IncidenceHandler::incidenceToExport(KCalCore::Incidence::Ptr sourceIncidence)
 {
     if (sourceIncidence->type() != KCalCore::IncidenceBase::TypeEvent) {
+        LOG_DEBUG("Incidence not an event; cannot create exportable version");
         return sourceIncidence;
     }
+
     KCalCore::Incidence::Ptr incidence = QSharedPointer<KCalCore::Incidence>(sourceIncidence->clone());
     KCalCore::Event::Ptr event = incidence.staticCast<KCalCore::Event>();
-
     if (event->allDay()) {
         bool sendWithoutDtEnd = !event->customProperty("buteo", PROP_DTEND_ADDED_USING_DTSTART).isEmpty()
                 && (event->dtStart() == event->dtEnd());
@@ -396,10 +398,31 @@ KCalCore::Incidence::Ptr IncidenceHandler::incidenceToExport(KCalCore::Incidence
         event->removeCustomProperty("buteo", PROP_DTEND_DATE_ONLY);
     }
 
+    // remove any URI or ETAG data we insert into the event for sync purposes.
     event->removeCustomProperty("buteo", "uri");
-
-    // We used to add this custom property and upsync with it still intact. Make sure it's removed
     event->removeCustomProperty("buteo", "etag");
+    const QStringList &comments(event->comments());
+    Q_FOREACH (const QString &comment, comments) {
+        if (comment.startsWith("buteo:caldav:uri:") ||
+            comment.startsWith("buteo:caldav:etag:")) {
+            LOG_DEBUG("Discarding buteo-prefixed comment:" << comment);
+            event->removeComment(comment);
+        }
+    }
 
-    return incidence;
+    // The default storage implementation applies the organizer as an attendee by default.
+    // Undo this as it turns the incidence into a scheduled event requiring acceptance/rejection/etc.
+    const KCalCore::Person::Ptr organizer = event->organizer();
+    if (organizer) {
+        Q_FOREACH (const KCalCore::Attendee::Ptr &attendee, event->attendees()) {
+            if (attendee->email() == organizer->email() && attendee->fullName() == organizer->fullName()) {
+                LOG_DEBUG("Discarding organizer as attendee" << attendee->fullName());
+                event->deleteAttendee(attendee);
+            } else {
+                LOG_DEBUG("Not discarding attendee:" << attendee->fullName() << attendee->email() << ": not organizer:" << organizer->fullName() << organizer->email());
+            }
+        }
+    }
+
+    return event;
 }

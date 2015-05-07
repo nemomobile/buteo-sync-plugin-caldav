@@ -25,8 +25,6 @@
 
 #include "reader.h"
 
-#include <kcalid.h>
-
 #include <extendedcalendar.h>
 #include <extendedstorage.h>
 
@@ -35,7 +33,6 @@
 class QNetworkAccessManager;
 class Request;
 class Settings;
-class CalDavCalendarDatabase;
 
 class NotebookSyncAgent : public QObject
 {
@@ -49,10 +46,9 @@ public:
 
     explicit NotebookSyncAgent(mKCal::ExtendedCalendar::Ptr calendar,
                                mKCal::ExtendedStorage::Ptr storage,
-                               CalDavCalendarDatabase *database,
                                QNetworkAccessManager *networkAccessManager,
                                Settings *settings,
-                               const QString &calendarServerPath,
+                               const QString &remoteCalendarPath,
                                QObject *parent = 0);
     ~NotebookSyncAgent();
 
@@ -63,12 +59,10 @@ public:
                        const QString &syncProfile,
                        const QString &color,
                        const QDateTime &fromDateTime,
-                       const QDateTime &toDateTime,
-                       const QString &notebookUidToDelete);
+                       const QDateTime &toDateTime);
 
     void startQuickSync(mKCal::Notebook::Ptr notebook,
                         const QDateTime &changesSinceDate,
-                        const KCalCore::Incidence::List &allCalendarIncidences,
                         const QDateTime &fromDateTime,
                         const QDateTime &toDateTime);
 
@@ -93,50 +87,48 @@ private:
 
     void fetchRemoteChanges(const QDateTime &fromDateTime, const QDateTime &toDateTime);
     bool updateIncidences(const QList<Reader::CalendarResource> &resources);
-    bool updateIncidence(KCalCore::Incidence::Ptr incidence, const Reader::CalendarResource &resource, bool *criticalError);
-    bool deleteIncidences(const QSet<KCalId> &incidenceUids);
+    bool updateIncidence(KCalCore::Incidence::Ptr incidence, KCalCore::Incidence::List notebookIncidences, const Reader::CalendarResource &resource, bool *criticalError);
+    bool deleteIncidences(KCalCore::Incidence::List deletedIncidences);
 
     void sendLocalChanges();
     QString constructLocalChangeIcs(KCalCore::Incidence::Ptr updatedIncidence);
     void finalizeSendingLocalChanges();
-    bool loadLocalChanges(const QDateTime &fromDate,
-                          KCalCore::Incidence::List *inserted,
-                          KCalCore::Incidence::List *modified,
-                          QSet<KCalId> *deleted);
-    bool discardRemoteChanges(KCalCore::Incidence::List *localInserted,
-                              KCalCore::Incidence::List *localModified,
-                              QSet<KCalId> *localDeleted);
-    int removeCommonIncidences(KCalCore::Incidence::List *inserted,
-                               QSet<KCalId> *deleted);
 
-    KCalCore::Incidence::List mCalendarIncidencesBeforeSync;
-    KCalCore::Incidence::List mStorageIncidenceList;
-    KCalCore::Incidence::List mLocallyInsertedIncidences;
-    KCalCore::Incidence::List mLocallyModifiedIncidences;
-    QList<Reader::CalendarResource> mReceivedCalendarResources;
-    QSet<KCalId> mStorageIds;
-    QSet<KCalId> mLocalDeletedIds;
-    QSet<KCalId> mRemoteModifiedIds;
-    QSet<KCalId> mNewRemoteIncidenceIds;
-    QSet<KCalId> mIncidenceIdsToDelete;
-    QSet<QString> mRemoteUids;
-    QHash<KCalId,QString> mModifiedIncidenceICalData;
-    QHash<QString,QString> mLocalETags;   // etags are for resources, not incidences, hence the key is URI
-    QHash<QString,QString> mUpdatedETags; // etags are for resources, not incidences, hence the key is URI
-    QSet<Request *> mRequests;
-    QNetworkAccessManager* mNAManager;
-    CalDavCalendarDatabase* mDatabase;
+    // we cannot access custom properties of deleted incidences from mkcal
+    // so instead, we need to determine the remote etag and uri via remote etags request and cache it here.
+    struct LocalDeletion {
+        LocalDeletion(KCalCore::Incidence::Ptr deleted, const QString &etag, const QString &uri)
+            : deletedIncidence(deleted), remoteEtag(etag), hrefUri(uri) {}
+        KCalCore::Incidence::Ptr deletedIncidence;
+        QString remoteEtag;
+        QString hrefUri;
+    };
+    bool calculateDelta(const KDateTime &fromDate,
+                        const QHash<QString, QString> &remoteUriEtags,
+                        KCalCore::Incidence::List *localAdditions,
+                        KCalCore::Incidence::List *localModifications,
+                        QList<LocalDeletion> *localDeletions,
+                        QList<QString> *remoteAdditions,
+                        QList<QString> *remoteModifications,
+                        KCalCore::Incidence::List *remoteDeletions);
+    void removePossibleLocalModificationIfIdentical(const QString &remoteUri,
+                                                    const QList<KDateTime> &recurrenceIds,
+                                                    const QList<Reader::CalendarResource> &remoteResources,
+                                                    KCalCore::Incidence::List *localModifications);
+
+    QNetworkAccessManager* mNetworkManager;
     Settings *mSettings;
+    QSet<Request *> mRequests;
     mKCal::ExtendedCalendar::Ptr mCalendar;
     mKCal::ExtendedStorage::Ptr mStorage;
     mKCal::Notebook::Ptr mNotebook;
     QDateTime mFromDateTime;
     QDateTime mToDateTime;
-    QDateTime mChangesSinceDate;
-    QString mServerPath;
-    SyncMode mSyncMode;
+    KDateTime mNotebookSyncedDateTime;
+    QString mRemoteCalendarPath; // contains calendar path.  resource prefix.  doesn't include host.
+    SyncMode mSyncMode;          // quick (etag-based delta detection) or slow (full report) sync
+    bool mRetriedReport;         // some servers will fail the first request but succeed on second
     bool mFinished;
-    bool mRetriedReport;
 
     // these are used only in slow-sync mode.
     QString mCalendarPath;
@@ -145,7 +137,21 @@ private:
     QString mPluginName;
     QString mSyncProfile;
     QString mColor;
-    QString mNotebookUidToDelete;
+
+    // these are used only in quick-sync mode.
+    QHash<QString,QString> mUpdatedETags; // etags are for resources, not incidences, hence the key is URI
+    QDateTime mChangesSinceDate;
+    // delta detection and change data
+    QMultiHash<QString, KDateTime> mPossibleLocalModificationIncidenceIds; // remoteUri to recurrenceIds.
+    KCalCore::Incidence::List mLocalAdditions;
+    KCalCore::Incidence::List mLocalModifications;
+    QList<LocalDeletion> mLocalDeletions;
+    QList<QString> mRemoteAdditions;
+    QList<QString> mRemoteModifications;
+    KCalCore::Incidence::List mRemoteDeletions;
+
+    // received remote incidence resource data
+    QList<Reader::CalendarResource> mReceivedCalendarResources;
 };
 
 #endif // NOTEBOOKSYNCAGENT_P_H

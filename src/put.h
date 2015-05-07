@@ -33,8 +33,6 @@
 
 #include <incidence.h>
 
-#include <kcalid.h>
-
 class QNetworkAccessManager;
 class Settings;
 
@@ -45,8 +43,8 @@ class Put : public Request
 public:
     explicit Put(QNetworkAccessManager *manager, Settings *settings, QObject *parent = 0);
 
-    void updateEvent(const QString &serverPath, const QString &icalData, const QString &eTag, const QString &uri, const KCalId &kcalId);
-    void createEvent(const QString &serverPath, const QString &icalData, const KCalId &kcalId);
+    void updateEvent(const QString &remoteCalendarPath, const QString &icalData, const QString &eTag, const QString &uri, const QString &localUid);
+    void createEvent(const QString &remoteCalendarPath, const QString &icalData, const QString &localUid);
 
     QHash<QString,QString> updatedETags() const;
 
@@ -54,7 +52,7 @@ private Q_SLOTS:
     void requestFinished();
 
 private:
-    QSet<KCalId> mIdList;
+    QSet<QString> mLocalUidList;
     QHash<QString,QString> mUpdatedETags;
 };
 

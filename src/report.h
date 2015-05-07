@@ -40,13 +40,13 @@ class Report : public Request
 public:
     explicit Report(QNetworkAccessManager *manager, Settings *settings, QObject *parent = 0);
 
-    void getAllEvents(const QString &serverPath,
+    void getAllEvents(const QString &remoteCalendarPath,
                       const QDateTime &fromDateTime = QDateTime(),
                       const QDateTime &toDateTime = QDateTime());
-    void getAllETags(const QString &serverPath,
+    void getAllETags(const QString &remoteCalendarPath,
                      const QDateTime &fromDateTime = QDateTime(),
                      const QDateTime &toDateTime = QDateTime());
-    void multiGetEvents(const QString &serverPath, const QStringList &eventIdList);
+    void multiGetEvents(const QString &remoteCalendarPath, const QStringList &eventHrefList);
 
     QMultiHash<QString, Reader::CalendarResource> receivedCalendarResources() const;
 
@@ -54,12 +54,12 @@ private Q_SLOTS:
     void processResponse();
 
 private:
-    void sendRequest(const QString &serverPath, const QByteArray &requestData);
-    void sendCalendarQuery(const QString &serverPath,
+    void sendRequest(const QString &remoteCalendarPath, const QByteArray &requestData);
+    void sendCalendarQuery(const QString &remoteCalendarPath,
                            const QDateTime &fromDateTime,
                            const QDateTime &toDateTime,
                            bool getCalendarData);
-    QString mServerPath;
+    QString mRemoteCalendarPath;
     QMultiHash<QString, Reader::CalendarResource> mReceivedResources;
 };
 

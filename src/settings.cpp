@@ -98,8 +98,3 @@ QList<Settings::CalendarInfo> Settings::calendars() const
 {
     return mCalendars;
 }
-
-QString Settings::notebookId(const QString &calendarServerPath) const
-{
-    return QString::number(mAccountId) + "-" + calendarServerPath;
-}
