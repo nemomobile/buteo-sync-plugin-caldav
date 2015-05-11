@@ -933,6 +933,13 @@ void NotebookSyncAgent::removePossibleLocalModificationIfIdentical(
         // find the possible local modification associated with this recurrenceId.
         int removeIdx = -1;
         for (int i = 0; i < localModifications->size(); ++i) {
+            // Only compare incidences which relate to the remote resource.
+            if (incidenceHrefUri(localModifications->at(i)) != remoteUri) {
+                LOG_DEBUG("skipping unrelated local modification:" << localModifications->at(i)->uid()
+                          << "(" << incidenceHrefUri(localModifications->at(i)) << ") for remote uri:"
+                          << remoteUri);
+                continue;
+            }
             // Note: we compare the remote resources with the "export" version of the local modifications
             // otherwise spurious differences might be detected.
             const KCalCore::Incidence::Ptr &pLMod = IncidenceHandler::incidenceToExport(localModifications->at(i));
@@ -943,10 +950,12 @@ void NotebookSyncAgent::removePossibleLocalModificationIfIdentical(
                         LOG_WARNING("error while removing spurious possible local modifications: resource uri mismatch:" << resource.href << "->" << remoteUri);
                     } else {
                         Q_FOREACH (const KCalCore::Incidence::Ptr &remoteIncidence, resource.incidences) {
-                            if (remoteIncidence->recurrenceId() == rid) {
+                            const KCalCore::Incidence::Ptr &exportRInc = IncidenceHandler::incidenceToExport(remoteIncidence);
+                            if (exportRInc->recurrenceId() == rid) {
                                 // found the remote incidence.  compare it to the local.
+                                LOG_WARNING("comparing:" << pLMod->uid() << "(" << remoteUri << ") to:" << exportRInc->uid() << "(" << resource.href << ")");
                                 foundMatch = true;
-                                if (IncidenceHandler::copiedPropertiesAreEqual(pLMod, remoteIncidence)) {
+                                if (IncidenceHandler::copiedPropertiesAreEqual(pLMod, exportRInc)) {
                                     removeIdx = i;  // this is a spurious local modification which needs to be removed.
                                 } else {
                                     removeIdx = -1; // this is a real local modification. no-op, but for completeness.
