@@ -263,6 +263,10 @@ QList<Settings::CalendarInfo> CalDavClient::loadCalendars(Accounts::Account *acc
         }
         // the calendar path may be percent-encoded.  Return UTF-8 QString.
         QString remoteCalendarPath = QUrl::fromPercentEncoding(calendarPaths[i].toUtf8());
+        if (account->providerName() == QStringLiteral("yahoo")) {
+            // Yahoo! seems to double-percent-encode for some reason
+            remoteCalendarPath = QUrl::fromPercentEncoding(remoteCalendarPath.toUtf8());
+        }
         Settings::CalendarInfo info = { remoteCalendarPath, displayNames[i], colors[i] };
         allCalendarInfo << info;
     }

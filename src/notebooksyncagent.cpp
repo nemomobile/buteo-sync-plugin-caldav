@@ -57,7 +57,15 @@ namespace {
         const QStringList &comments(incidence->comments());
         Q_FOREACH (const QString &comment, comments) {
             if (comment.startsWith("buteo:caldav:uri:")) {
-                return comment.mid(17);
+                QString uri = comment.mid(17);
+                if (uri.contains('%')) {
+                    // if it contained a % or a space character, we percent-encoded
+                    // the uri before storing it, because otherwise kcal doesn't
+                    // split the comments properly.
+                    uri = QUrl::fromPercentEncoding(uri.toUtf8());
+                    LOG_DEBUG("URI comment was percent encoded:" << comment << ", returning uri:" << uri);
+                }
+                return uri;
             }
         }
         if (uriNeedsFilling) {
@@ -78,7 +86,13 @@ namespace {
                 break;
             }
         }
-        incidence->addComment(QStringLiteral("buteo:caldav:uri:%1").arg(hrefUri));
+        if (hrefUri.contains('%') || hrefUri.contains(' ')) {
+            // need to percent-encode the uri before storing it,
+            // otherwise mkcal doesn't split the comments correctly.
+            incidence->addComment(QStringLiteral("buteo:caldav:uri:%1").arg(QString::fromUtf8(QUrl::toPercentEncoding(hrefUri))));
+        } else {
+            incidence->addComment(QStringLiteral("buteo:caldav:uri:%1").arg(hrefUri));
+        }
     }
     int findIncidenceMatchingHrefUri(KCalCore::Incidence::List incidences, const QString &hrefUri)
     {
