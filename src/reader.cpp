@@ -73,7 +73,7 @@ void Reader::readResponse()
     CalendarResource resource;
     while (mReader->readNextStartElement()) {
         if (mReader->name() == "href") {
-            resource.href = mReader->readElementText();
+            resource.href = QUrl::fromPercentEncoding(mReader->readElementText().toLatin1());
         } else if (mReader->name() == "propstat") {
             readPropStat(&resource);
         }
@@ -118,7 +118,7 @@ void Reader::readResponse()
         }
     }
 
-    mResults.insert(QUrl::fromPercentEncoding(resource.href.toLatin1()), resource); // multihash insert.
+    mResults.insert(resource.href, resource); // multihash insert.
 }
 
 void Reader::readPropStat(CalendarResource *resource)

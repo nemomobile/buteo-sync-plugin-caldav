@@ -44,7 +44,7 @@ Put::Put(QNetworkAccessManager *manager, Settings *settings, QObject *parent)
 {
 }
 
-void Put::updateEvent(const QString &remoteCalendarPath, const QString &icalData, const QString &eTag, const QString &uri, const QString &localUid)
+void Put::updateEvent(const QString &, const QString &icalData, const QString &eTag, const QString &uri, const QString &localUid)
 {
     FUNCTION_CALL_TRACE;
 
