@@ -50,4 +50,4 @@ rm -rf %{buildroot}
 %qmake5_install
 
 %post
-su nemo -c "systemctl --user restart msyncd.service"
+systemctl-user try-restart msyncd.service || :
