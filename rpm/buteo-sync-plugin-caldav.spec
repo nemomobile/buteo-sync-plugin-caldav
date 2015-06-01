@@ -50,4 +50,4 @@ rm -rf %{buildroot}
 %qmake5_install
 
 %post
-su nemo -c "systemctl --user restart msyncd.service"
+echo "if you manually installed the package, you should invoke 'systemctl --user daemon-reload' and then 'systemctl --user restart msyncd'" || :
