@@ -263,7 +263,7 @@ QList<Settings::CalendarInfo> CalDavClient::loadCalendars(Accounts::Account *acc
         }
         // the calendar path may be percent-encoded.  Return UTF-8 QString.
         QString remoteCalendarPath = QUrl::fromPercentEncoding(calendarPaths[i].toUtf8());
-        if (account->providerName() == QStringLiteral("yahoo")) {
+        if (mSettings.serverAddress().contains(QStringLiteral("caldav.calendar.yahoo.com"))) {
             // Yahoo! seems to double-percent-encode for some reason
             remoteCalendarPath = QUrl::fromPercentEncoding(remoteCalendarPath.toUtf8());
         }
@@ -308,21 +308,19 @@ bool CalDavClient::initConfig()
         return false;
     }
 
+    account->selectService(srv);
+    mSettings.setServerAddress(account->value("server_address").toString());
+    if (mSettings.serverAddress().isEmpty()) {
+        LOG_CRITICAL("remote_address not found in service settings");
+        return false;
+    }
+    mSettings.setIgnoreSSLErrors(account->value("ignore_ssl_errors").toBool());
     mSettings.setCalendars(loadCalendars(account, srv));
     if (mSettings.calendars().isEmpty()) {
         LOG_CRITICAL("no calendars found");
         return false;
     }
-
-    account->selectService(srv);
-    mSettings.setServerAddress(account->value("server_address").toString());
-    mSettings.setIgnoreSSLErrors(account->value("ignore_ssl_errors").toBool());
     account->selectService(Accounts::Service());
-
-    if (mSettings.serverAddress().isEmpty()) {
-        LOG_CRITICAL("remote_address not found in service settings");
-        return false;
-    }
 
     mAuth = new AuthHandler(mManager, accountId, srv.name());
     if (!mAuth->init()) {
