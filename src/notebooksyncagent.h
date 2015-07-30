@@ -114,6 +114,7 @@ private:
     void removePossibleLocalModificationIfIdentical(const QString &remoteUri,
                                                     const QList<KDateTime> &recurrenceIds,
                                                     const QList<Reader::CalendarResource> &remoteResources,
+                                                    const QMultiHash<QString, KDateTime> &addedPersistentExceptionOccurrences,
                                                     KCalCore::Incidence::List *localModifications);
 
     QNetworkAccessManager* mNetworkManager;
@@ -142,6 +143,7 @@ private:
     QHash<QString,QString> mUpdatedETags; // etags are for resources, not incidences, hence the key is URI
     QDateTime mChangesSinceDate;
     // delta detection and change data
+    QMultiHash<QString, KDateTime> mAddedPersistentExceptionOccurrences;   // remoteUri to recurrenceIds.
     QMultiHash<QString, KDateTime> mPossibleLocalModificationIncidenceIds; // remoteUri to recurrenceIds.
     KCalCore::Incidence::List mLocalAdditions;
     KCalCore::Incidence::List mLocalModifications;
