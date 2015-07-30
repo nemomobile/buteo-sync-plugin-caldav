@@ -1,6 +1,6 @@
 Name:       buteo-sync-plugin-caldav
 Summary:    Syncs calendar data from CalDAV services
-Version:    0.1.28
+Version:    0.1.29
 Release:    1
 Group:      System/Libraries
 License:    LGPLv2.1
