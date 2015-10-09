@@ -81,6 +81,11 @@ bool AuthHandler::init()
         return false;
     }
     mAccount->selectService(srv);
+    if (!mAccount->enabled()) {
+        LOG_WARNING("Service:" << m_accountService << "is not enabled for account:" << mAccount->id());
+        return false;
+    }
+
     mAccount->value(AUTH + SLASH + AUTH_METHOD, val);
     mMethod = val.toString();
     mAccount->value(AUTH + SLASH + MECHANISM, val);
