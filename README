@@ -1,6 +1,2 @@
-This package provides a "client" synchronization plugin to the Buteo
-sync framework.  It connects to CalDAV servers using a valid account
-(accounts&sso framework) and synchronizes calendar data from the
-remote CalDAV service to the device and vice versa.
-
-It is a two-way sync plugin.
+This project has migrated to https://git.merproject.org/mer-core/buteo-sync-plugin-caldav
+as part of the Mer/Nemo merge work
